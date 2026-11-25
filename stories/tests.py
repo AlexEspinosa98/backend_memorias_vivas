@@ -274,6 +274,78 @@ class StoryApiTests(APITestCase, BaseFixture):
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data["status"], StoryStatus.PUBLISHED)
 
+    def test_la_autoria_no_registra_su_propia_autorizacion(self):
+        """Quien escribe no certifica su propio permiso."""
+        story = Story.objects.create(
+            author=self.miembro_a, community=self.com_a, title="Mi relato",
+            visibility=Visibility.COMMUNITY, status=StoryStatus.IN_REVIEW,
+        )
+        url = reverse("historia-autorizaciones", args=[story.pk])
+        payload = {
+            "granted_by_name": "Yo mismo",
+            "scope": Consent.Scope.OPEN,
+            "granted_on": str(date.today()),
+        }
+        self.client.force_authenticate(self.miembro_a)
+        self.assertEqual(self.client.post(url, payload, format="json").status_code, 403)
+        self.assertFalse(story.consents.exists())
+
+    def test_la_autoridad_si_registra_la_autorizacion(self):
+        story = Story.objects.create(
+            author=self.miembro_a, community=self.com_a, title="Para autorizar",
+            visibility=Visibility.COMMUNITY, status=StoryStatus.IN_REVIEW,
+        )
+        url = reverse("historia-autorizaciones", args=[story.pk])
+        self.client.force_authenticate(self.autoridad_a)
+        response = self.client.post(
+            url,
+            {
+                "granted_by_name": "Autoridad de la comunidad",
+                "granted_by_role": "Cabildo",
+                "scope": Consent.Scope.COMMUNITY,
+                "granted_on": str(date.today()),
+                "conditions": "No sale de la comunidad.",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        consent = story.consents.get()
+        self.assertEqual(consent.recorded_by, self.autoridad_a)
+
+    def test_la_administracion_registra_en_cualquier_comunidad(self):
+        story = Story.objects.create(
+            author=self.miembro_b, community=self.com_b, title="De otra comunidad",
+            visibility=Visibility.COMMUNITY, status=StoryStatus.IN_REVIEW,
+        )
+        self.client.force_authenticate(self.moderador)
+        response = self.client.post(
+            reverse("historia-autorizaciones", args=[story.pk]),
+            {"granted_by_name": "Administración", "scope": Consent.Scope.OPEN,
+             "granted_on": str(date.today())},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+
+    def test_la_autoria_si_puede_leer_sus_autorizaciones(self):
+        self.client.force_authenticate(self.miembro_a)
+        url = reverse("historia-autorizaciones", args=[self.publica.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 1)
+
+    def test_enviar_a_revision_no_exige_autorizacion(self):
+        """La autorización llega después, en la revisión."""
+        story = Story.objects.create(
+            author=self.miembro_a, community=self.com_a, title="Recién escrita",
+            visibility=Visibility.COMMUNITY,
+        )
+        self.client.force_authenticate(self.miembro_a)
+        response = self.client.post(
+            reverse("historia-enviar-a-revision", args=[story.pk]), {}, format="json"
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["status"], StoryStatus.IN_REVIEW)
+
     def test_miembro_raso_no_publica(self):
         story = Story.objects.create(
             author=self.miembro_a, community=self.com_a, title="Mía",

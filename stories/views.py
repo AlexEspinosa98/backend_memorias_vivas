@@ -208,20 +208,35 @@ class StoryViewSet(viewsets.ModelViewSet):
         permission_classes=[permissions.IsAuthenticated],
     )
     def autorizaciones(self, request, pk=None):
+        """
+        Consultar y registrar la autorización de la comunidad.
+
+        Leer: la autoría, la autoridad de la comunidad y la administración.
+        Registrar: **solo** la autoridad de la comunidad o la administración.
+        Quien escribe una historia no certifica su propio permiso: esa es la
+        regla de cuidado cultural que sostiene todo el archivo.
+        """
         story = self.get_object()
-        puede = (
-            story.author_id == request.user.id
-            or request.user.is_staff_role
-            or story.community_id in request.user.authority_community_ids()
+        user = request.user
+        es_moderacion = (
+            user.is_staff_role
+            or story.community_id in user.authority_community_ids()
         )
-        if not puede:
-            raise PermissionDenied("No puede ver ni registrar autorizaciones de esta historia.")
+
         if request.method == "GET":
+            if not (es_moderacion or story.author_id == user.id):
+                raise PermissionDenied("No puede ver las autorizaciones de esta historia.")
             return Response(ConsentSerializer(story.consents.all(), many=True).data)
+
+        if not es_moderacion:
+            raise PermissionDenied(
+                "La autorización la registra la autoridad de la comunidad o la "
+                "administración, no quien publica."
+            )
         data = {**request.data, "story": story.pk}
         serializer = ConsentSerializer(data=data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(recorded_by=request.user)
+        serializer.save(recorded_by=user)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @action(

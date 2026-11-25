@@ -1,9 +1,18 @@
 """
-Datos de demostración del muro: comunidades, personas e historias de ejemplo.
+Datos de demostración del muro.
 
-Contenido ficticio de prueba, no material cultural real. Idempotente.
+Crea comunidades, personas (un líder por comunidad y miembros) e historias
+que cubren los cuatro niveles de acceso y el flujo de autorización completo.
+
+El contenido se apoya en los temas documentados del archivo (tejido, café,
+lengua, territorio) y **no es material cultural real**: son textos de prueba
+redactados por el equipo para poder ver la plataforma funcionando. Cada
+autorización lo dice de forma explícita en sus condiciones.
+
+Idempotente.
 
     python manage.py seed_muro
+    python manage.py seed_muro --reset    # borra lo sembrado y lo vuelve a crear
 """
 from datetime import date, timedelta
 
@@ -19,6 +28,7 @@ from stories.models import (
     Promotion,
     Reaction,
     Story,
+    StoryAccessGrant,
     StoryKind,
     StoryStatus,
     Tag,
@@ -28,6 +38,14 @@ from stories.models import (
 
 User = get_user_model()
 
+CLAVE = "contra123"
+DOMINIO = "@memoriasvivas.co"
+
+NOTA_DEMO = (
+    "Contenido de demostración del prototipo, redactado por el equipo ALUNA IA. "
+    "No es material cultural real ni sustituye la autorización de la comunidad."
+)
+
 COMMUNITIES = [
     {
         "name": "Nabusímake",
@@ -36,33 +54,52 @@ COMMUNITIES = [
         "department": "Cesar",
         "latitude": "10.577000",
         "longitude": "-73.587000",
-        "description": "Centro reconocido del pueblo Arhuaco, con importancia cultural e histórica.",
+        "description": (
+            "Uno de los centros más reconocidos del pueblo Arhuaco, con importancia "
+            "cultural e histórica. No representa la totalidad del territorio ni de "
+            "las comunidades Arhuacas."
+        ),
     },
     {
         "name": "Séynimin",
         "territory": "Vertiente norte de la Sierra Nevada",
         "municipality": "Santa Marta",
         "department": "Magdalena",
-        "description": "Comunidad de la vertiente norte vinculada a procesos de defensa territorial.",
+        "latitude": "11.150000",
+        "longitude": "-73.950000",
+        "description": (
+            "Comunidad de la vertiente norte, vinculada a procesos de defensa "
+            "territorial y producción audiovisual propia."
+        ),
     },
     {
         "name": "Ikarwa",
         "territory": "Cuenca alta del río Fundación",
         "municipality": "Fundación",
         "department": "Magdalena",
-        "description": "Comunidad de la cuenca alta, con trabajo en educación propia.",
+        "latitude": "10.700000",
+        "longitude": "-74.100000",
+        "description": "Comunidad de la cuenca alta, con trabajo en educación propia y tejido.",
     },
 ]
 
+# (correo sin dominio, nombre, rol de plataforma, comunidad, rol en la comunidad)
 PEOPLE = [
-    ("mamo.zalabata@memoriasvivas.co", "Zalabata Torres", "autoridad", "Nabusímake"),
-    ("ana.izquierdo@memoriasvivas.co", "Ana Izquierdo", "miembro", "Nabusímake"),
-    ("juan.villafane@memoriasvivas.co", "Juan Villafañe", "moderador", "Séynimin"),
-    ("tejedoras@memoriasvivas.co", "Colectivo de Tejedoras", "miembro", "Ikarwa"),
-    ("visitante@memoriasvivas.co", "Persona visitante", None, None),
+    ("admin", "Administración del archivo", "admin", None, None),
+    ("lider", "Líder de Nabusímake", "autoridad", "Nabusímake", "autoridad"),
+    ("persona1", "Persona 1", "miembro", "Nabusímake", "miembro"),
+    ("lider2", "Líder de Séynimin", "autoridad", "Séynimin", "autoridad"),
+    ("persona2", "Persona 2", "miembro", "Ikarwa", "miembro"),
+    ("tejedoras", "Colectivo de Tejedoras", "miembro", "Ikarwa", "miembro"),
+    ("visitante", "Persona visitante", "visitante", None, None),
+    # Solicitud pendiente, para ver el flujo de aprobación del líder.
+    ("solicitante", "Persona que solicita ingreso", "visitante", "Nabusímake", "pendiente"),
 ]
 
-DEMO_PASSWORD = "memorias2026"
+TAGS = [
+    "tejido", "lengua ika", "territorio", "memoria", "educación propia",
+    "café", "agricultura", "mujeres", "jóvenes",
+]
 
 
 class Command(BaseCommand):
@@ -78,95 +115,137 @@ class Command(BaseCommand):
     @transaction.atomic
     def handle(self, *args, **options):
         if options["reset"]:
-            Story.objects.filter(author__email__endswith="@memoriasvivas.co").delete()
-            self.stdout.write("Historias de demostración borradas.")
+            borradas, _ = Story.objects.filter(
+                author__email__endswith=DOMINIO
+            ).delete()
+            self.stdout.write(f"Borradas {borradas} filas de demostración.")
 
+        self.communities = self._seed_communities()
+        self.users = self._seed_people()
+        for name in TAGS:
+            Tag.objects.get_or_create(name=name)
+
+        stories = self._seed_stories()
+        self._seed_interactions(stories)
+
+        publicadas = Story.objects.filter(status=StoryStatus.PUBLISHED).count()
+        abiertas = Story.objects.filter(
+            status=StoryStatus.PUBLISHED, visibility=Visibility.PUBLIC
+        ).count()
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"\nListo: {len(self.communities)} comunidades, {len(self.users)} personas, "
+                f"{len(stories)} historias ({publicadas} publicadas, {abiertas} de uso abierto).\n"
+                f"Todas las cuentas de demostración usan la clave: {CLAVE}"
+            )
+        )
+
+    # ------------------------------------------------------------------
+    def _seed_communities(self):
         communities = {}
         for data in COMMUNITIES:
             community, _ = Community.objects.update_or_create(
                 name=data["name"], defaults=data
             )
             communities[community.name] = community
+            self.stdout.write(f"· comunidad {community.name}")
+        return communities
 
+    def _seed_people(self):
         users = {}
-        for email, name, role, community_name in PEOPLE:
+        for slug, name, role, community_name, community_role in PEOPLE:
+            email = f"{slug}{DOMINIO}"
             user, created = User.objects.get_or_create(
                 email=email,
                 defaults={
                     "display_name": name,
-                    "role": "autoridad" if role == "autoridad" else (
-                        "moderador" if role == "moderador" else "miembro" if role else "visitante"
-                    ),
+                    "role": role,
                     "place": community_name or "",
                     "accepted_care_terms_at": timezone.now(),
+                    "is_staff": role == "admin",
+                    "is_superuser": role == "admin",
                 },
             )
-            if created:
-                user.set_password(DEMO_PASSWORD)
-                user.save()
-            users[email] = user
+            # La clave se restablece siempre: es una cuenta de demostración.
+            user.set_password(CLAVE)
+            user.save()
+            users[slug] = user
+
             if community_name:
+                estado = (
+                    Membership.Status.PENDING
+                    if community_role == "pendiente"
+                    else Membership.Status.ACTIVE
+                )
                 Membership.objects.update_or_create(
-                    community=communities[community_name],
+                    community=self.communities[community_name],
                     user=user,
                     defaults={
-                        "role": role if role in {"autoridad", "moderador"} else "miembro",
-                        "status": Membership.Status.ACTIVE,
+                        "role": (
+                            Membership.Role.AUTHORITY
+                            if community_role == "autoridad"
+                            else Membership.Role.MEMBER
+                        ),
+                        "status": estado,
+                        "note": (
+                            "Solicitud de prueba, para ver cómo la aprueba el líder."
+                            if estado == Membership.Status.PENDING
+                            else ""
+                        ),
                     },
                 )
-
-        admin, created = User.objects.get_or_create(
-            email="admin@memoriasvivas.co",
-            defaults={
-                "display_name": "Administración",
-                "role": "admin",
-                "is_staff": True,
-                "is_superuser": True,
-                "accepted_care_terms_at": timezone.now(),
-            },
-        )
-        if created:
-            admin.set_password(DEMO_PASSWORD)
-            admin.save()
-
-        for name in ["tejido", "lengua ika", "territorio", "memoria", "educación propia", "café"]:
-            Tag.objects.get_or_create(name=name)
-
-        stories = self._seed_stories(users, communities)
-        self._seed_interactions(stories, users)
-
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"Listo: {len(communities)} comunidades, {User.objects.count()} personas, "
-                f"{len(stories)} historias. Clave de demostración: {DEMO_PASSWORD}"
+            self.stdout.write(
+                f"  {'+' if created else '·'} {email:<34} {role:<10} {community_name or ''}"
             )
-        )
+        return users
 
     # ------------------------------------------------------------------
-    def _story(self, *, author, community, title, **kwargs):
+    def _publicar(self, story, *, autoriza, calidad, alcance, dias_atras, condiciones=""):
+        """Registra la autorización (siempre a nombre de la administración) y publica."""
+        Consent.objects.create(
+            story=story,
+            granted_by_name=autoriza,
+            granted_by_role=calidad,
+            community=story.community,
+            scope=alcance,
+            granted_on=date.today() - timedelta(days=dias_atras),
+            conditions=f"{condiciones} {NOTA_DEMO}".strip(),
+            recorded_by=self.users["admin"],
+        )
+        story.published_at = timezone.now() - timedelta(days=dias_atras)
+        story.publish(by=self.users["admin"])
+        return story
+
+    def _crear(self, *, autor, comunidad, titulo, **extra):
         story, created = Story.objects.get_or_create(
-            title=title,
-            defaults={"author": author, "community": community, **kwargs},
+            title=titulo,
+            defaults={
+                "author": self.users[autor],
+                "community": self.communities[comunidad] if comunidad else None,
+                **extra,
+            },
         )
         return story, created
 
-    def _seed_stories(self, users, communities):
-        made = []
+    def _seed_stories(self):
+        hechas = []
 
-        # 1. Uso abierto, con autorización de uso abierto.
-        story, created = self._story(
-            author=users["ana.izquierdo@memoriasvivas.co"],
-            community=communities["Nabusímake"],
-            title="El tejido como forma de pensamiento",
+        # --- 1. Uso abierto: el tejido -----------------------------------
+        story, nueva = self._crear(
+            autor="persona1",
+            comunidad="Nabusímake",
+            titulo="El tejido de la mochila se empieza por el centro",
             kind=StoryKind.SABER,
-            summary="Las tejedoras cuentan cómo se aprende a tejer la mochila en casa.",
+            summary="Cómo se aprende a tejer en casa, contado por quienes tejen.",
             body=(
-                "Mi abuela decía que la mochila se empieza por el centro, igual que el "
-                "pensamiento. Primero la vuelta, después la figura. Lo que uno piensa "
-                "mientras teje queda en el tejido.\n\n"
-                "Este relato se comparte con autorización de la familia para que las nuevas "
-                "generaciones conozcan la práctica, sin explicar los significados de cada figura: "
-                "eso lo enseñan las tejedoras directamente."
+                "La mochila se empieza por el centro, igual que el pensamiento. "
+                "Primero la vuelta, después la figura. Lo que uno piensa mientras "
+                "teje queda en el tejido.\n\n"
+                "El aprendizaje no tiene horario ni salón: se aprende mirando, "
+                "preguntando y deshaciendo muchas veces la misma vuelta. Las mayores "
+                "corrigen con la mano, no con la palabra.\n\n"
+                "Este relato comparte la práctica, no los significados de cada figura. "
+                "Esos los explican las tejedoras directamente, a quien corresponde."
             ),
             visibility=Visibility.PUBLIC,
             place_name="Nabusímake, Pueblo Bello (Cesar)",
@@ -174,108 +253,128 @@ class Command(BaseCommand):
             longitude="-73.587000",
             language="es",
         )
-        if created:
-            Consent.objects.create(
-                story=story,
-                granted_by_name="Familia Izquierdo",
-                granted_by_role="La persona del relato y su familia",
-                community=communities["Nabusímake"],
-                scope=Consent.Scope.OPEN,
-                granted_on=date.today() - timedelta(days=20),
-                conditions="No se publican los significados de las figuras del tejido.",
+        if nueva:
+            story.tags.set(Tag.objects.filter(name__in=["tejido", "memoria", "mujeres"]))
+            self._publicar(
+                story, autoriza="Líder de Nabusímake",
+                calidad="Autoridad de la comunidad", alcance=Consent.Scope.OPEN,
+                dias_atras=24,
+                condiciones="No se publican los significados de las figuras del tejido.",
             )
-            story.tags.set(Tag.objects.filter(name__in=["tejido", "memoria"]))
-            story.publish(by=users["mamo.zalabata@memoriasvivas.co"])
-        made.append(story)
+        hechas.append(story)
 
-        # 2. Solo comunidad.
-        story, created = self._story(
-            author=users["mamo.zalabata@memoriasvivas.co"],
-            community=communities["Nabusímake"],
-            title="Acuerdos de la reunión sobre educación propia",
-            kind=StoryKind.AVISO,
-            summary="Resumen de los acuerdos para el próximo ciclo escolar.",
+        # --- 2. Uso abierto: el café --------------------------------------
+        story, nueva = self._crear(
+            autor="persona2",
+            comunidad="Ikarwa",
+            titulo="El café que baja de la cuenca alta",
+            kind=StoryKind.SABER,
+            summary="La siembra cambia con la altura, y con ella cambia el trabajo del año.",
             body=(
-                "La reunión acordó reforzar el uso de la lengua Ika en los primeros años y "
-                "organizar encuentros mensuales con mayores. Queda pendiente definir quién "
-                "acompaña los registros en audio."
+                "En la cuenca alta se siembra según el piso térmico: maíz, fríjol, "
+                "yuca, plátano, papa, hortalizas. El café llegó después y se quedó.\n\n"
+                "La producción familiar y comunitaria sostiene el consumo diario y el "
+                "intercambio entre zonas de clima distinto. Lo que sobra de una parte "
+                "falta en la otra, y así se mueve.\n\n"
+                "No todas las familias siembran igual ni lo mismo. Esto es lo que pasa "
+                "aquí, no una descripción de todo el pueblo."
             ),
-            visibility=Visibility.COMMUNITY,
+            visibility=Visibility.PUBLIC,
+            place_name="Ikarwa, Fundación (Magdalena)",
+            latitude="10.700000",
+            longitude="-74.100000",
+        )
+        if nueva:
+            story.tags.set(Tag.objects.filter(name__in=["café", "agricultura"]))
+            self._publicar(
+                story, autoriza="Líder de Nabusímake",
+                calidad="Autoridad de la comunidad", alcance=Consent.Scope.OPEN,
+                dias_atras=18,
+            )
+        hechas.append(story)
+
+        # --- 3. Uso abierto: la lengua ------------------------------------
+        story, nueva = self._crear(
+            autor="lider",
+            comunidad="Nabusímake",
+            titulo="Por qué decimos Iku y no solo Arhuaco",
+            kind=StoryKind.LENGUA,
+            summary="Sobre el nombre propio del pueblo y las formas en que se escribe.",
+            body=(
+                "Iku es la palabra con la que el pueblo se nombra a sí mismo; suele "
+                "traducirse como «gente». «Arhuaco» es la forma extendida en español.\n\n"
+                "En documentos aparecen también Ika, Ikʉ e Ijku. No son errores: son "
+                "maneras distintas de escribir una lengua que se transmite hablando.\n\n"
+                "En este archivo usamos «pueblo Iku» o «pueblo Arhuaco». Antes de "
+                "publicar palabras o audios en Ika se verifican con hablantes."
+            ),
+            visibility=Visibility.PUBLIC,
             place_name="Nabusímake",
-            language="es",
+            language="bilingue",
         )
-        if created:
-            Consent.objects.create(
-                story=story,
-                granted_by_name="Autoridades de Nabusímake",
-                granted_by_role="Autoridad de la comunidad",
-                community=communities["Nabusímake"],
-                scope=Consent.Scope.COMMUNITY,
-                granted_on=date.today() - timedelta(days=5),
+        if nueva:
+            story.tags.set(Tag.objects.filter(name__in=["lengua ika", "educación propia"]))
+            self._publicar(
+                story, autoriza="Líder de Nabusímake",
+                calidad="Autoridad de la comunidad", alcance=Consent.Scope.OPEN,
+                dias_atras=12,
             )
-            story.tags.set(Tag.objects.filter(name__in=["educación propia", "lengua ika"]))
-            story.publish(by=users["mamo.zalabata@memoriasvivas.co"])
-        made.append(story)
+        hechas.append(story)
 
-        # 3. Sensible + restringido: no se mapea, requiere permiso nominal.
-        story, created = self._story(
-            author=users["juan.villafane@memoriasvivas.co"],
-            community=communities["Séynimin"],
-            title="Registro de un recorrido de cuidado (acceso restringido)",
-            kind=StoryKind.MEMORIA,
-            summary="Material de consulta interna. No se divulga la ubicación.",
+        # --- 4. Uso abierto: promoción ------------------------------------
+        story, nueva = self._crear(
+            autor="tejedoras",
+            comunidad="Ikarwa",
+            titulo="Mochilas tejidas por el colectivo de Ikarwa",
+            kind=StoryKind.PROMOCION,
+            summary="Tejido propio, por encargo. El acuerdo es directo con el colectivo.",
             body=(
-                "Registro guardado para consulta interna de la comunidad. El contenido y la "
-                "ubicación no se divulgan: la autorización cubre únicamente la consulta de "
-                "las personas designadas por la comunidad."
+                "El colectivo reúne a doce tejedoras de la cuenca alta. Cada mochila "
+                "lleva el nombre de quien la teje y el tiempo que tomó.\n\n"
+                "Los encargos se acuerdan directamente. La plataforma no cobra ni "
+                "intermedia: solo sirve para que nos encuentren."
             ),
-            visibility=Visibility.RESTRICTED,
-            is_sensitive=True,
-            place_name="Territorio de Séynimin",
-            latitude="11.100000",
-            longitude="-73.900000",
-            allow_comments=False,
+            visibility=Visibility.PUBLIC,
+            place_name="Ikarwa, Fundación (Magdalena)",
+            latitude="10.705000",
+            longitude="-74.095000",
         )
-        if created:
-            Consent.objects.create(
+        if nueva:
+            story.tags.set(Tag.objects.filter(name__in=["tejido", "mujeres"]))
+            Promotion.objects.create(
                 story=story,
-                granted_by_name="Autoridades de Séynimin",
-                granted_by_role="Autoridad de la comunidad",
-                community=communities["Séynimin"],
-                scope=Consent.Scope.RESEARCH,
-                granted_on=date.today() - timedelta(days=2),
-                conditions="Consulta interna. No reproducir, no mapear, no transcribir sin revisión.",
+                category=Promotion.Category.ARTESANIA,
+                contact="Colectivo de Tejedoras de Ikarwa",
+                price_note="Según tamaño y tiempo de tejido; se acuerda por encargo.",
+                active_until=date.today() + timedelta(days=120),
             )
-            story.publish(by=users["juan.villafane@memoriasvivas.co"])
-        made.append(story)
+            self._publicar(
+                story, autoriza="Colectivo de Tejedoras de Ikarwa",
+                calidad="Las propias artesanas", alcance=Consent.Scope.OPEN,
+                dias_atras=15,
+            )
+        hechas.append(story)
 
-        # 4. Visita / recorrido, registrado.
-        story, created = self._story(
-            author=users["juan.villafane@memoriasvivas.co"],
-            community=communities["Séynimin"],
-            title="Recorrido de intercambio con estudiantes",
+        # --- 5. Personas registradas: visita -------------------------------
+        story, nueva = self._crear(
+            autor="lider2",
+            comunidad="Séynimin",
+            titulo="Recorrido de intercambio con estudiantes",
             kind=StoryKind.VISITA,
-            summary="Dos días de intercambio con acuerdos de respeto definidos por la comunidad.",
+            summary="Dos días de conversación sobre territorio y educación propia.",
             body=(
-                "La comunidad recibe un grupo pequeño para conversar sobre territorio y "
-                "educación propia. Hay lugares a los que no se entra y momentos en los que "
-                "no se toman fotografías."
+                "La comunidad recibe un grupo pequeño para conversar sobre territorio "
+                "y educación propia.\n\n"
+                "Hay lugares a los que no se entra y momentos en los que no se toman "
+                "fotografías. Eso no se negocia durante el recorrido: se acuerda antes."
             ),
             visibility=Visibility.REGISTERED,
             place_name="Séynimin, Santa Marta (Magdalena)",
             latitude="11.150000",
             longitude="-73.950000",
         )
-        if created:
-            Consent.objects.create(
-                story=story,
-                granted_by_name="Autoridades de Séynimin",
-                granted_by_role="Autoridad de la comunidad",
-                community=communities["Séynimin"],
-                scope=Consent.Scope.OPEN,
-                granted_on=date.today() - timedelta(days=10),
-                conditions="No se fotografían espacios de pagamento.",
-            )
+        if nueva:
+            story.tags.set(Tag.objects.filter(name__in=["territorio", "jóvenes"]))
             Visit.objects.create(
                 story=story,
                 starts_on=date.today() + timedelta(days=21),
@@ -284,78 +383,201 @@ class Command(BaseCommand):
                 capacity=12,
                 contact="Comité de Séynimin",
                 conditions=(
-                    "Se acuerda con la comunidad el recorrido. No se ingresa a sitios sagrados. "
-                    "Fotografía solo donde la comunidad lo autorice."
+                    "El recorrido se acuerda con la comunidad. No se ingresa a sitios "
+                    "sagrados. Fotografía solo donde la comunidad lo autorice."
                 ),
             )
-            story.tags.set(Tag.objects.filter(name__in=["territorio", "educación propia"]))
-            story.publish(by=users["juan.villafane@memoriasvivas.co"])
-        made.append(story)
+            self._publicar(
+                story, autoriza="Líder de Séynimin",
+                calidad="Autoridad de la comunidad", alcance=Consent.Scope.OPEN,
+                dias_atras=9,
+                condiciones="No se fotografían espacios de pagamento.",
+            )
+        hechas.append(story)
 
-        # 5. Promoción, uso abierto.
-        story, created = self._story(
-            author=users["tejedoras@memoriasvivas.co"],
-            community=communities["Ikarwa"],
-            title="Mochilas tejidas por el colectivo de Ikarwa",
-            kind=StoryKind.PROMOCION,
-            summary="Tejido propio, por encargo. El contacto es directo con el colectivo.",
+        # --- 6. Solo la comunidad: aviso ------------------------------------
+        story, nueva = self._crear(
+            autor="lider",
+            comunidad="Nabusímake",
+            titulo="Acuerdos de la reunión sobre educación propia",
+            kind=StoryKind.AVISO,
+            summary="Resumen de los acuerdos para el próximo ciclo escolar.",
             body=(
-                "El colectivo reúne a doce tejedoras de la cuenca alta. Los encargos se "
-                "acuerdan directamente; cada mochila lleva el nombre de quien la teje."
+                "La reunión acordó reforzar el uso de la lengua Ika en los primeros "
+                "años y organizar encuentros mensuales con mayores.\n\n"
+                "Queda pendiente definir quién acompaña los registros en audio y "
+                "quién revisa las transcripciones antes de que se publiquen."
             ),
-            visibility=Visibility.PUBLIC,
-            place_name="Ikarwa, Fundación (Magdalena)",
-            latitude="10.700000",
-            longitude="-74.100000",
+            visibility=Visibility.COMMUNITY,
+            place_name="Nabusímake",
         )
-        if created:
-            Consent.objects.create(
-                story=story,
-                granted_by_name="Colectivo de Tejedoras de Ikarwa",
-                granted_by_role="Las propias artesanas",
-                community=communities["Ikarwa"],
-                scope=Consent.Scope.OPEN,
-                granted_on=date.today() - timedelta(days=15),
+        if nueva:
+            story.tags.set(Tag.objects.filter(name__in=["educación propia", "lengua ika"]))
+            self._publicar(
+                story, autoriza="Líder de Nabusímake",
+                calidad="Autoridad de la comunidad", alcance=Consent.Scope.COMMUNITY,
+                dias_atras=4,
             )
-            Promotion.objects.create(
-                story=story,
-                category=Promotion.Category.ARTESANIA,
-                contact="Colectivo de Tejedoras de Ikarwa",
-                price_note="Según tamaño y tiempo de tejido; se acuerda por encargo.",
-                active_until=date.today() + timedelta(days=120),
-            )
-            story.tags.set(Tag.objects.filter(name__in=["tejido"]))
-            story.publish(by=users["mamo.zalabata@memoriasvivas.co"])
-        made.append(story)
+        hechas.append(story)
 
-        # 6. En revisión: muestra el flujo de autorización pendiente.
-        self._story(
-            author=users["ana.izquierdo@memoriasvivas.co"],
-            community=communities["Nabusímake"],
-            title="Audio de un mayor hablando sobre el café (pendiente de autorización)",
+        # --- 7. Solo la comunidad: memoria familiar --------------------------
+        story, nueva = self._crear(
+            autor="persona1",
+            comunidad="Nabusímake",
+            titulo="Lo que contaba mi abuelo de los caminos viejos",
+            kind=StoryKind.MEMORIA,
+            summary="Memoria familiar que la comunidad prefiere guardar entre nosotros.",
+            body=(
+                "Mi abuelo caminaba de una zona a otra antes de que hubiera carretera. "
+                "Decía que el camino enseña más que la casa.\n\n"
+                "Esta memoria se comparte dentro de la comunidad. No está lista para "
+                "salir: faltan nombres por confirmar y hay que preguntarle a más gente."
+            ),
+            visibility=Visibility.COMMUNITY,
+            place_name="Nabusímake",
+        )
+        if nueva:
+            story.tags.set(Tag.objects.filter(name__in=["memoria", "territorio"]))
+            self._publicar(
+                story, autoriza="Familia de Persona 1",
+                calidad="La familia del relato", alcance=Consent.Scope.COMMUNITY,
+                dias_atras=2,
+                condiciones="No sale de la comunidad hasta que se confirmen los nombres.",
+            )
+        hechas.append(story)
+
+        # --- 8. Restringida y sensible ---------------------------------------
+        story, nueva = self._crear(
+            autor="lider2",
+            comunidad="Séynimin",
+            titulo="Registro de un recorrido de cuidado (acceso restringido)",
+            kind=StoryKind.MEMORIA,
+            summary="Material de consulta interna. No se divulga la ubicación.",
+            body=(
+                "Registro guardado para consulta interna de la comunidad.\n\n"
+                "El contenido y la ubicación no se divulgan: la autorización cubre "
+                "únicamente la consulta de las personas que la comunidad designe."
+            ),
+            visibility=Visibility.RESTRICTED,
+            is_sensitive=True,
+            place_name="Territorio de Séynimin",
+            latitude="11.100000",
+            longitude="-73.900000",
+            allow_comments=False,
+        )
+        if nueva:
+            self._publicar(
+                story, autoriza="Autoridades de Séynimin",
+                calidad="Autoridad de la comunidad", alcance=Consent.Scope.RESEARCH,
+                dias_atras=1,
+                condiciones="Consulta interna. No reproducir, no mapear, no transcribir sin revisión.",
+            )
+            StoryAccessGrant.objects.get_or_create(
+                story=story,
+                user=self.users["lider"],
+                defaults={
+                    "granted_by": self.users["lider2"],
+                    "reason": "Intercambio entre autoridades de las dos comunidades.",
+                },
+            )
+        hechas.append(story)
+
+        # --- 9. En revisión: el flujo de autorización pendiente ---------------
+        story, _ = self._crear(
+            autor="persona1",
+            comunidad="Nabusímake",
+            titulo="Audio de un mayor hablando sobre el café",
             kind=StoryKind.TESTIMONIO,
-            summary="Grabación en espera de que la comunidad revise la transcripción.",
-            body="Grabación de 8 minutos. La transcripción automática debe ser revisada antes de publicar.",
+            summary="Grabación de 8 minutos, a la espera de que la comunidad la revise.",
+            body=(
+                "Grabación hecha con permiso de la persona. La transcripción "
+                "automática todavía no ha sido revisada, así que no debería "
+                "publicarse tal como está.\n\n"
+                "Falta que la autoridad registre la autorización y decida el alcance."
+            ),
             visibility=Visibility.COMMUNITY,
             status=StoryStatus.IN_REVIEW,
             place_name="Nabusímake",
             language="bilingue",
         )
-        return made
+        hechas.append(story)
 
-    def _seed_interactions(self, stories, users):
-        published = [s for s in stories if s.status == StoryStatus.PUBLISHED]
-        if not published:
-            return
-        first = published[0]
-        for email in ["juan.villafane@memoriasvivas.co", "tejedoras@memoriasvivas.co", "visitante@memoriasvivas.co"]:
-            Reaction.objects.get_or_create(
-                story=first, user=users[email], defaults={"kind": Reaction.Kind.LIKE}
-            )
-        Comment.objects.get_or_create(
-            story=first,
-            author=users["tejedoras@memoriasvivas.co"],
-            body="Así nos enseñaron también en Ikarwa. Gracias por compartirlo.",
+        # --- 10. Otra en revisión, de otra comunidad ---------------------------
+        story, _ = self._crear(
+            autor="persona2",
+            comunidad="Ikarwa",
+            titulo="Fotografías del taller de lana",
+            kind=StoryKind.SABER,
+            summary="Propuesta de publicación abierta, pendiente de autorización.",
+            body=(
+                "Fotografías del taller sobre la calidad de la lana y el tejido. "
+                "Se propone publicarlas de forma abierta, con los créditos de quien "
+                "las tomó.\n\n"
+                "Falta la autorización de la comunidad y confirmar que las personas "
+                "que aparecen están de acuerdo."
+            ),
+            visibility=Visibility.PUBLIC,
+            status=StoryStatus.IN_REVIEW,
+            place_name="Ikarwa, Fundación (Magdalena)",
         )
-        for story in published:
+        hechas.append(story)
+
+        for story in hechas:
+            self.stdout.write(
+                f"  · {story.get_status_display():<26} {story.get_visibility_display():<36} {story.title[:44]}"
+            )
+        return hechas
+
+    # ------------------------------------------------------------------
+    def _seed_interactions(self, stories):
+        publicadas = [s for s in stories if s.status == StoryStatus.PUBLISHED]
+        reacciones = {
+            "El tejido de la mochila se empieza por el centro": [
+                "persona2", "tejedoras", "visitante", "lider2",
+            ],
+            "El café que baja de la cuenca alta": ["persona1", "visitante"],
+            "Por qué decimos Iku y no solo Arhuaco": ["persona1", "persona2", "tejedoras"],
+            "Mochilas tejidas por el colectivo de Ikarwa": ["persona1", "visitante"],
+        }
+        for titulo, quienes in reacciones.items():
+            story = next((s for s in publicadas if s.title == titulo), None)
+            if story is None:
+                continue
+            for slug in quienes:
+                Reaction.objects.get_or_create(
+                    story=story, user=self.users[slug],
+                    defaults={"kind": Reaction.Kind.LIKE},
+                )
+
+        comentarios = [
+            (
+                "El tejido de la mochila se empieza por el centro",
+                "tejedoras",
+                "Así nos enseñaron también en Ikarwa. Gracias por compartirlo.",
+            ),
+            (
+                "El tejido de la mochila se empieza por el centro",
+                "visitante",
+                "Gracias por explicar hasta dónde se puede contar y hasta dónde no.",
+            ),
+            (
+                "Por qué decimos Iku y no solo Arhuaco",
+                "persona2",
+                "Esto deberíamos ponerlo al principio del archivo.",
+            ),
+            (
+                "Acuerdos de la reunión sobre educación propia",
+                "persona1",
+                "Yo puedo acompañar los registros en audio los sábados.",
+            ),
+        ]
+        for titulo, slug, texto in comentarios:
+            story = next((s for s in publicadas if s.title == titulo), None)
+            if story is None or not story.allow_comments:
+                continue
+            Comment.objects.get_or_create(
+                story=story, author=self.users[slug], body=texto
+            )
+
+        for story in publicadas:
             story.recount()
