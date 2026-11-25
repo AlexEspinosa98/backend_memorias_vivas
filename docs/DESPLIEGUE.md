@@ -97,8 +97,20 @@ línea `DATABASE_URL` del `.env`.
 | `DJANGO_SECRET_KEY` | una clave nueva y larga (ver abajo) |
 | `DJANGO_DEBUG` | `False` |
 | `DJANGO_ALLOWED_HOSTS` | `.vercel.app` |
-| `CORS_ALLOWED_ORIGINS` | la URL del front, con `https://` y sin barra final |
 | `CSRF_TRUSTED_ORIGINS` | `https://*.vercel.app` |
+
+> **CORS no se configura aquí.** Está abierto desde `settings.py`
+> (`CORS_ALLOW_ALL_ORIGINS = True`), sin depender de ninguna variable, para
+> que el front funcione desde producción, desde cualquier vista previa de
+> Vercel y desde localhost sin mantener listas.
+>
+> Es seguro porque la autenticación va por token Bearer, no por cookie:
+> `CORS_ALLOW_CREDENTIALS = False` impide que el navegador mande cookies de
+> sesión desde otro dominio. Y CORS no decide qué datos salen — eso lo sigue
+> resolviendo `StoryQuerySet.visible_for()` en cada petición.
+>
+> Si alguna vez hay que cerrarlo, el bloque comentado al final de la sección
+> CORS de `settings.py` tiene la lista lista para descomentar.
 
 Para generar la clave:
 

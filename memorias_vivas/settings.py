@@ -190,33 +190,30 @@ SPECTACULAR_SETTINGS = {
 }
 
 # --- CORS ----------------------------------------------------------------
-# El front vive en otro dominio, así que sin esto el navegador bloquea todas
-# las llamadas (el login incluido) sin decir por qué.
-CORS_ALLOWED_ORIGINS = env_list("CORS_ALLOWED_ORIGINS")
-CORS_ALLOW_CREDENTIALS = True
+# Abierto desde el backend: el front funciona desde cualquier dominio
+# (producción, vistas previas de Vercel, localhost) sin mantener listas ni
+# variables de entorno.
+#
+# Esto es seguro aquí por una razón concreta: la autenticación va por token
+# Bearer en la cabecera, no por cookie. `CORS_ALLOW_CREDENTIALS = False` hace
+# que el navegador nunca mande cookies de sesión en una petición de otro
+# dominio. Abrir CORS *y* permitir credenciales sí sería peligroso: dejaría
+# que cualquier página hiciera peticiones con la sesión del admin.
+#
+# Lo que esto NO cambia: quién puede ver qué. Eso lo sigue decidiendo
+# `StoryQuerySet.visible_for()` en cada petición. CORS solo gobierna desde qué
+# página del navegador se puede llamar a la API, no qué devuelve.
+#
+# Es incondicional a propósito: no depende de ninguna variable de entorno, así
+# que una variable vieja o mal escrita en Vercel no puede volver a dejar el
+# front sin poder hablar con la API.
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = False
 
-# En desarrollo siempre se permite el front local, aunque la variable traiga
-# solo el dominio de producción.
-if DEBUG:
-    for origen in ("http://localhost:3000", "http://127.0.0.1:3000"):
-        if origen not in CORS_ALLOWED_ORIGINS:
-            CORS_ALLOWED_ORIGINS.append(origen)
-
-# Vercel le da una URL distinta a cada despliegue de vista previa, así que la
-# lista fija no alcanza. `CORS_ALLOWED_ORIGIN_REGEXES` acepta expresiones
-# regulares separadas por coma, por ejemplo:
-#   ^https://front-memorias-vivas-[\w-]+\.vercel\.app$
-CORS_ALLOWED_ORIGIN_REGEXES = env_list("CORS_ALLOWED_ORIGIN_REGEXES")
-
-if not DEBUG and not CORS_ALLOWED_ORIGINS and not CORS_ALLOWED_ORIGIN_REGEXES:
-    import warnings
-
-    warnings.warn(
-        "CORS_ALLOWED_ORIGINS está vacío en producción: el navegador va a "
-        "bloquear todas las llamadas del front. Defina la variable de entorno "
-        "con la URL del front (https://…, sin barra final).",
-        RuntimeWarning,
-    )
+# Para cerrarlo el día que haga falta, cambie lo de arriba por una lista:
+#   CORS_ALLOW_ALL_ORIGINS = False
+#   CORS_ALLOWED_ORIGINS = ["https://front-memorias-vivas.vercel.app"]
+#   CORS_ALLOWED_ORIGIN_REGEXES = [r"^https://front-memorias-vivas-[\w-]+\.vercel\.app$"]
 
 if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")

@@ -107,8 +107,11 @@ DJANGO_SECRET_KEY   (una clave larga y nueva)
 DJANGO_DEBUG        False
 DJANGO_ALLOWED_HOSTS  .vercel.app,<su-dominio>
 DATABASE_URL        la cadena de Postgres (Neon o Vercel Postgres)
-CORS_ALLOWED_ORIGINS  https://<el-front>.vercel.app
 ```
+
+CORS no se configura: está abierto desde `settings.py`, porque la
+autenticación va por token Bearer y no por cookie (`CORS_ALLOW_CREDENTIALS`
+queda en `False`). Quién ve qué lo sigue decidiendo `visible_for()`, no CORS.
 
 Las migraciones se corren una vez contra esa base:
 
