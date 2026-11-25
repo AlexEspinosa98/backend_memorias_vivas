@@ -25,6 +25,7 @@ from communities.models import Community, Membership
 from stories.models import (
     Comment,
     Consent,
+    MediaItem,
     Promotion,
     Reaction,
     Story,
@@ -46,14 +47,19 @@ NOTA_DEMO = (
     "No es material cultural real ni sustituye la autorización de la comunidad."
 )
 
+# Coordenadas: Nabusímake es la real (OpenStreetMap la registra como
+# «Nabusimake / San Sebastián de Rábago», 10.56139 N, 73.58556 W). Séynimin e
+# Ikarwa son asentamientos pequeños que no están en ningún geocodificador
+# público: sus coordenadas son aproximadas, ubicadas en la vertiente y la
+# cuenca que cada una habita, y así se indican en el muro.
 COMMUNITIES = [
     {
         "name": "Nabusímake",
         "territory": "Resguardo Arhuaco de la Sierra Nevada",
         "municipality": "Pueblo Bello",
         "department": "Cesar",
-        "latitude": "10.577000",
-        "longitude": "-73.587000",
+        "latitude": "10.561390",
+        "longitude": "-73.585560",
         "description": (
             "Uno de los centros más reconocidos del pueblo Arhuaco, con importancia "
             "cultural e histórica. No representa la totalidad del territorio ni de "
@@ -65,8 +71,8 @@ COMMUNITIES = [
         "territory": "Vertiente norte de la Sierra Nevada",
         "municipality": "Santa Marta",
         "department": "Magdalena",
-        "latitude": "11.150000",
-        "longitude": "-73.950000",
+        "latitude": "11.050000",
+        "longitude": "-73.850000",
         "description": (
             "Comunidad de la vertiente norte, vinculada a procesos de defensa "
             "territorial y producción audiovisual propia."
@@ -77,8 +83,8 @@ COMMUNITIES = [
         "territory": "Cuenca alta del río Fundación",
         "municipality": "Fundación",
         "department": "Magdalena",
-        "latitude": "10.700000",
-        "longitude": "-74.100000",
+        "latitude": "10.650000",
+        "longitude": "-74.000000",
         "description": "Comunidad de la cuenca alta, con trabajo en educación propia y tejido.",
     },
 ]
@@ -100,6 +106,60 @@ TAGS = [
     "tejido", "lengua ika", "territorio", "memoria", "educación propia",
     "café", "agricultura", "mujeres", "jóvenes",
 ]
+
+# Imágenes de las historias: son las figuras del documento base, servidas como
+# archivos estáticos del front (`public/figuras/`) y no desde MEDIA_ROOT, que
+# en Vercel es efímero. Cada una conserva el crédito tal como lo trae el
+# documento, como exige la nota metodológica del archivo.
+MEDIA = {
+    "El tejido de la mochila se empieza por el centro": (
+        "/figuras/practica-tejido.jpg",
+        "Práctica del tejido Arhuaco",
+        "Fotografía tomada de Mujeres indígenas, por EL TIEMPO (2022).",
+    ),
+    "El café que baja de la cuenca alta": (
+        "/figuras/labores-agricolas.jpg",
+        "Recolección de caña de azúcar por integrantes del pueblo Arhuaco",
+        "Fotografía de Laura Rodríguez Navarro, publicada por la Oficina de las "
+        "Naciones Unidas contra la Droga y el Delito (UNODC), en Noticias ONU (2021).",
+    ),
+    "Por qué decimos Iku y no solo Arhuaco": (
+        "/figuras/hombres-arhuacos.jpg",
+        "Hombres Arhuacos",
+        "Fotografía de Raúl Arboleda, publicada por AFP en NAIZ (2024).",
+    ),
+    "Mochilas tejidas por el colectivo de Ikarwa": (
+        "/figuras/mochila-tradicional.jpg",
+        "Mochila tradicional del pueblo Arhuaco",
+        "Fotografía tomada de Jóvenes artesanos Arhuacos impulsan iniciativa de "
+        "desarrollo artesanal, por SIART (2012), Artesanías de Colombia.",
+    ),
+    "Recorrido de intercambio con estudiantes": (
+        "/figuras/sierra-nevada.jpg",
+        "Sierra Nevada de Santa Marta",
+        "Imagen tomada de Parque Nacional Natural Sierra Nevada de Santa Marta, "
+        "por Colombia País (s. f.).",
+    ),
+    "Acuerdos de la reunión sobre educación propia": (
+        "/figuras/poblacion-reunida.jpg",
+        "Población Arhuaca reunida",
+        "Fotografía de Óscar Pérez, publicada en ¿Qué está pasando con el Pueblo "
+        "Arhuaco en el Cesar?, por Redacción Colombia (2022), El Espectador.",
+    ),
+    "Lo que contaba mi abuelo de los caminos viejos": (
+        "/figuras/sierra-nevada-paisaje.jpg",
+        "Paisaje de la Sierra Nevada de Santa Marta",
+        "Fotografía tomada de Parque Nacional Natural Sierra Nevada de Santa Marta, "
+        "por Parques Nacionales Naturales de Colombia (s. f.).",
+    ),
+    "Fotografías del taller de lana": (
+        "/figuras/taller-lana.jpg",
+        "Artesanas Arhuacas participan en un taller sobre la calidad de la lana",
+        "Fotografía publicada por AGROSAVIA (2025), en el marco de un taller sobre "
+        "la calidad de la lana y el tejido tradicional en Nabusímake.",
+    ),
+    # La historia restringida y sensible no lleva imagen, a propósito.
+}
 
 
 class Command(BaseCommand):
@@ -126,6 +186,7 @@ class Command(BaseCommand):
             Tag.objects.get_or_create(name=name)
 
         stories = self._seed_stories()
+        self._seed_media(stories)
         self._seed_interactions(stories)
 
         publicadas = Story.objects.filter(status=StoryStatus.PUBLISHED).count()
@@ -249,8 +310,8 @@ class Command(BaseCommand):
             ),
             visibility=Visibility.PUBLIC,
             place_name="Nabusímake, Pueblo Bello (Cesar)",
-            latitude="10.577000",
-            longitude="-73.587000",
+            latitude="10.561390",
+            longitude="-73.585560",
             language="es",
         )
         if nueva:
@@ -281,8 +342,8 @@ class Command(BaseCommand):
             ),
             visibility=Visibility.PUBLIC,
             place_name="Ikarwa, Fundación (Magdalena)",
-            latitude="10.700000",
-            longitude="-74.100000",
+            latitude="10.650000",
+            longitude="-74.000000",
         )
         if nueva:
             story.tags.set(Tag.objects.filter(name__in=["café", "agricultura"]))
@@ -336,8 +397,8 @@ class Command(BaseCommand):
             ),
             visibility=Visibility.PUBLIC,
             place_name="Ikarwa, Fundación (Magdalena)",
-            latitude="10.705000",
-            longitude="-74.095000",
+            latitude="10.655000",
+            longitude="-73.995000",
         )
         if nueva:
             story.tags.set(Tag.objects.filter(name__in=["tejido", "mujeres"]))
@@ -370,8 +431,8 @@ class Command(BaseCommand):
             ),
             visibility=Visibility.REGISTERED,
             place_name="Séynimin, Santa Marta (Magdalena)",
-            latitude="11.150000",
-            longitude="-73.950000",
+            latitude="11.050000",
+            longitude="-73.850000",
         )
         if nueva:
             story.tags.set(Tag.objects.filter(name__in=["territorio", "jóvenes"]))
@@ -461,8 +522,8 @@ class Command(BaseCommand):
             visibility=Visibility.RESTRICTED,
             is_sensitive=True,
             place_name="Territorio de Séynimin",
-            latitude="11.100000",
-            longitude="-73.900000",
+            latitude="11.020000",
+            longitude="-73.880000",
             allow_comments=False,
         )
         if nueva:
@@ -529,6 +590,26 @@ class Command(BaseCommand):
         return hechas
 
     # ------------------------------------------------------------------
+    def _seed_media(self, stories):
+        puestas = 0
+        for story in stories:
+            datos = MEDIA.get(story.title)
+            if datos is None:
+                continue
+            url, caption, credit = datos
+            _, creada = MediaItem.objects.update_or_create(
+                story=story,
+                external_url=url,
+                defaults={
+                    "kind": MediaItem.Kind.IMAGE,
+                    "caption": caption,
+                    "credit": credit,
+                    "order": 0,
+                },
+            )
+            puestas += 1
+        self.stdout.write(f"  · {puestas} imágenes con su crédito")
+
     def _seed_interactions(self, stories):
         publicadas = [s for s in stories if s.status == StoryStatus.PUBLISHED]
         reacciones = {

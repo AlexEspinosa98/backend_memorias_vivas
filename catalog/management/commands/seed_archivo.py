@@ -8,7 +8,7 @@ Idempotente: se puede correr varias veces (upsert por `number` / `citation`).
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from catalog.models import ArchiveSection, Source
+from catalog.models import ArchiveSection, Figure, Source
 
 SECTIONS = [
     {
@@ -262,6 +262,80 @@ SOURCES = {
     "artesanias": ("fotografica", "Artesanías de Colombia. (s. f.). Jóvenes artesanos Arhuacos impulsan iniciativa de desarrollo artesanal. Sistema de Información para la Artesanía (SIART).", "https://artesaniasdecolombia.com.co/PortalAC/Noticia/jovenes-artesanos-arhuacos-impulsan-iniciativa-de-desarrollo-artesanal_3482", ""),
 }
 
+# Las figuras del documento base: número de sección -> (figura, título, nota, archivo).
+# Se sirven como estáticos del front (`public/figuras/`) y no desde MEDIA_ROOT,
+# que en Vercel es efímero. Cada una conserva su crédito completo.
+FIGURES = {
+    1: [
+        (2, "Población Arhuaca reunida",
+         "Fotografía de Óscar Pérez, publicada en ¿Qué está pasando con el Pueblo Arhuaco "
+         "en el Cesar?, por Redacción Colombia (2022), El Espectador.",
+         "/figuras/poblacion-reunida.jpg"),
+    ],
+    2: [
+        (1, "Hombres Arhuacos",
+         "Fotografía de Raúl Arboleda, publicada por AFP en NAIZ (2024).",
+         "/figuras/hombres-arhuacos.jpg"),
+    ],
+    3: [
+        (3, "Mapa de resguardos indígenas y figuras ambientales de la Sierra Nevada de Santa Marta",
+         "Mapa de delimitación de resguardos indígenas, reservas forestales, parques "
+         "nacionales naturales y corporaciones autónomas regionales. Fuente temática: "
+         "Consejo Territorial de Cabildos de la Sierra Nevada de Santa Marta (2015); "
+         "base cartográfica: Instituto Geográfico Agustín Codazzi (IGAC).",
+         "/mapa-resguardos-snsm.jpg"),
+        (14, "Departamentos y municipios de mayor concentración del pueblo Arhuaco",
+         "Mapa tomado de Arhuacos: Los guardianes de la vida, por Carlos Garizabalo Hoyos "
+         "(s. f.), Casa Chünü'ü. Fuente cartográfica: Cartografía de la Diversidad – "
+         "Dirección de Poblaciones; fuente estadística: Censo DANE 2005.",
+         "/figuras/mapa-departamentos.jpg"),
+    ],
+    5: [
+        (4, "Mamü, autoridad espiritual y política del pueblo Arhuaco",
+         "Captura de pantalla del video Mamü, máxima autoridad política y espiritual de la "
+         "comunidad arhuaca, publicado por la Universidad del Rosario (2023).",
+         "/figuras/mamu-autoridad.jpg"),
+    ],
+    6: [
+        (5, "Vestimenta tradicional Arhuaca",
+         "Fotografía de Juan Arboleda, publicada en Fotocommunity.",
+         "/figuras/vestimenta-tradicional.jpg"),
+        (6, "Práctica del tejido Arhuaco",
+         "Fotografía tomada de Mujeres indígenas, por EL TIEMPO (2022).",
+         "/figuras/practica-tejido.jpg"),
+        (7, "Práctica ceremonial del pueblo Arhuaco",
+         "Fotografía publicada en Etnias del Mundo (s. f.).",
+         "/figuras/practica-ceremonial.jpg"),
+    ],
+    9: [
+        (8, "Recolección de caña de azúcar por integrantes del pueblo Arhuaco",
+         "Fotografía de Laura Rodríguez Navarro, publicada por la Oficina de las Naciones "
+         "Unidas contra la Droga y el Delito (UNODC), en Noticias ONU (2021).",
+         "/figuras/labores-agricolas.jpg"),
+        (9, "Artesanas Arhuacas participan en un taller sobre la calidad de la lana",
+         "Fotografía publicada por AGROSAVIA (2025), en el marco de un taller sobre la "
+         "calidad de la lana y el tejido tradicional en Nabusímake.",
+         "/figuras/taller-lana.jpg"),
+    ],
+    12: [
+        (10, "Sierra Nevada de Santa Marta",
+         "Imagen tomada de Parque Nacional Natural Sierra Nevada de Santa Marta, por "
+         "Colombia País (s. f.).",
+         "/figuras/sierra-nevada.jpg"),
+        (11, "Paisaje de la Sierra Nevada de Santa Marta",
+         "Fotografía tomada de Parque Nacional Natural Sierra Nevada de Santa Marta, por "
+         "Parques Nacionales Naturales de Colombia (s. f.).",
+         "/figuras/sierra-nevada-paisaje.jpg"),
+        (12, "Mochila tradicional del pueblo Arhuaco",
+         "Fotografía tomada de Jóvenes artesanos Arhuacos impulsan iniciativa de desarrollo "
+         "artesanal, por SIART (2012), Artesanías de Colombia.",
+         "/figuras/mochila-tradicional.jpg"),
+        (13, "Registro audiovisual relacionado con el pueblo Arhuaco",
+         "Captura de pantalla tomada del video publicado en YouTube (Noticias Caracol, 2025).",
+         "/figuras/registro-audiovisual.jpg"),
+    ],
+}
+
 # Las líneas «Fuente de apoyo» del documento base, sección por sección.
 SECTION_SOURCES = {
     2: ["mincultura", "onic", "procuraduria"],
@@ -301,6 +375,24 @@ class Command(BaseCommand):
                 f"{'+' if created else '·'} {section.number}. {section.title}"
             )
 
+        figuras = 0
+        for number, items in FIGURES.items():
+            section = sections.get(number)
+            if section is None:
+                continue
+            for order, (figura, caption, note, url) in enumerate(items):
+                Figure.objects.update_or_create(
+                    section=section,
+                    number=figura,
+                    defaults={
+                        "caption": caption,
+                        "note": note,
+                        "external_url": url,
+                        "order": order,
+                    },
+                )
+                figuras += 1
+
         sources: dict[str, Source] = {}
         for key, (kind, citation, url, year) in SOURCES.items():
             source, _ = Source.objects.update_or_create(
@@ -321,7 +413,7 @@ class Command(BaseCommand):
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"Listo: {len(SECTIONS)} secciones, {len(SOURCES)} fuentes "
-                f"y {enlaces} vínculos entre ambas."
+                f"Listo: {len(SECTIONS)} secciones, {figuras} figuras, "
+                f"{len(SOURCES)} fuentes y {enlaces} vínculos."
             )
         )
