@@ -241,24 +241,42 @@ SECTIONS = [
     },
 ]
 
-SOURCES = [
-    ("institucional", "Ministerio de Cultura. (s. f.). Iku (Arhuacos): Guardianes de la vida. Caracterizaciones de los pueblos indígenas de Colombia.", "https://mng.mincultura.gov.co/prensa/noticias/Documents/Poblaciones/archuaco.pdf", ""),
-    ("organizacion", "Organización Nacional Indígena de Colombia (ONIC). (s. f.). Ijku – Arhuaco.", "https://www.onic.org.co/pueblos/110-arhuaco", ""),
-    ("institucional", "Procuraduría General de la Nación. (s. f.). Caracterización general de la comunidad pueblo indígena Arhuaco.", "https://www.procuraduria.gov.co/portal/media/docs/Caracterizacionarhuaco.pdf", ""),
-    ("academica", "Instituto Colombiano de Antropología e Historia (ICANH). (s. f.). Pueblo Arhuaco.", "https://colecciones.icanh.gov.co/articulos/pueblos/ARHUACO.php", ""),
-    ("institucional", "Ministerio de Cultura y Consejo Territorial de Cabildos Gobernadores de la Sierra Nevada de Santa Marta. (2016). Plan Especial de Salvaguardia: Sistema de conocimiento ancestral de los cuatro pueblos indígenas de la Sierra Nevada de Santa Marta.", "https://mincultura.gov.co/direcciones/patrimonio-y-memoria/Documents/21-sistema-de-conocimiento-ancestral-SNSM-PES.pdf", "2016"),
-    ("academica", "Hernández Montes, N. E. (2017). Las tradiciones orales como proceso de enseñanza y de aprendizaje para el fortalecimiento de las tradiciones culturales Arhuacas. Universidad Nacional Abierta y a Distancia.", "https://repository.unad.edu.co/handle/10596/13937", "2017"),
-    ("institucional", "Centro Nacional de Memoria Histórica. (s. f.). Memorias Étnicas: Pueblo Arhuaco.", "https://centrodememoriahistorica.gov.co/micrositios/comunidades-etnicas/maleta.html", ""),
-    ("norma", "República de Colombia, Ministerio del Interior. (2026, 19 de mayo). Decreto 0514 de 2026.", "https://jurinfo.jep.gov.co/Normograma/compilacion/docs/decreto_0514_2026.htm", "2026"),
-    ("institucional", "Gobernación del Magdalena. (s. f.). Información sobre grupos indígenas.", "https://www.gobernaciondelmagdalena.gov.co/transparencia-resolucion-1519-de-2020/transparencia-informacion-especifica-para-grupos-de-interes/grupos-indigenas/", ""),
-    ("institucional", "Agencia Nacional de Tierras. (s. f.). Pueblo Arhuaco recibe 465 hectáreas para ampliar su territorio ancestral.", "https://www.ant.gov.co/prensa/noticias/con-el-fin-de-que-amplien-su-territorio-ancestral-pueblo-arhuaco-recibe-de-la-ant-un-total-de-465-hectareas", ""),
-    ("audiovisual", "IWGIA, Ore Media y Canejo Producciones. (2018). Voces de las montañas sagradas – Pueblo Arhuaco [Documental]. YouTube.", "https://www.youtube.com/watch?v=BEp8V93WlKs", "2018"),
-    ("audiovisual", "DW Español. (2019, 13 de marzo). La resiliencia del pueblo arhuaco en Colombia [Video]. YouTube.", "https://www.youtube.com/watch?v=TF6xNDoiNJM", "2019"),
-    ("audiovisual", "Universidad del Rosario. (2023, 13 de febrero). Mamü, máxima autoridad política y espiritual de la comunidad arhuaca [Video]. YouTube.", "https://www.youtube.com/watch?v=FxUZuRzcoJU", "2023"),
-    ("fotografica", "Parques Nacionales Naturales de Colombia. (s. f.). Parque Nacional Natural Sierra Nevada de Santa Marta.", "https://www.parquesnacionales.gov.co/nuestros-parques/pnn-sierra-nevada-de-santa-marta/", ""),
-    ("fotografica", "EL TIEMPO. (2022). Mujeres indígenas: Crónicas de la Sierra Nevada.", "https://www.eltiempo.com/infografias/2022/10/mujeres_indigenas/cronicas-dev/sierra/index.html", "2022"),
-    ("fotografica", "Artesanías de Colombia. (s. f.). Jóvenes artesanos Arhuacos impulsan iniciativa de desarrollo artesanal. Sistema de Información para la Artesanía (SIART).", "https://artesaniasdecolombia.com.co/PortalAC/Noticia/jovenes-artesanos-arhuacos-impulsan-iniciativa-de-desarrollo-artesanal_3482", ""),
-]
+# clave -> (tipo, referencia, url, año). La clave sirve para vincular cada
+# fuente con las secciones que la citan (ver SECTION_SOURCES).
+SOURCES = {
+    "mincultura": ("institucional", "Ministerio de Cultura. (s. f.). Iku (Arhuacos): Guardianes de la vida. Caracterizaciones de los pueblos indígenas de Colombia.", "https://mng.mincultura.gov.co/prensa/noticias/Documents/Poblaciones/archuaco.pdf", ""),
+    "onic": ("organizacion", "Organización Nacional Indígena de Colombia (ONIC). (s. f.). Ijku – Arhuaco.", "https://www.onic.org.co/pueblos/110-arhuaco", ""),
+    "procuraduria": ("institucional", "Procuraduría General de la Nación. (s. f.). Caracterización general de la comunidad pueblo indígena Arhuaco.", "https://www.procuraduria.gov.co/portal/media/docs/Caracterizacionarhuaco.pdf", ""),
+    "icanh": ("academica", "Instituto Colombiano de Antropología e Historia (ICANH). (s. f.). Pueblo Arhuaco.", "https://colecciones.icanh.gov.co/articulos/pueblos/ARHUACO.php", ""),
+    "pes": ("institucional", "Ministerio de Cultura y Consejo Territorial de Cabildos Gobernadores de la Sierra Nevada de Santa Marta. (2016). Plan Especial de Salvaguardia: Sistema de conocimiento ancestral de los cuatro pueblos indígenas de la Sierra Nevada de Santa Marta.", "https://mincultura.gov.co/direcciones/patrimonio-y-memoria/Documents/21-sistema-de-conocimiento-ancestral-SNSM-PES.pdf", "2016"),
+    "unad": ("academica", "Hernández Montes, N. E. (2017). Las tradiciones orales como proceso de enseñanza y de aprendizaje para el fortalecimiento de las tradiciones culturales Arhuacas. Universidad Nacional Abierta y a Distancia.", "https://repository.unad.edu.co/handle/10596/13937", "2017"),
+    "cnmh": ("institucional", "Centro Nacional de Memoria Histórica. (s. f.). Memorias Étnicas: Pueblo Arhuaco.", "https://centrodememoriahistorica.gov.co/micrositios/comunidades-etnicas/maleta.html", ""),
+    "decreto": ("norma", "República de Colombia, Ministerio del Interior. (2026, 19 de mayo). Decreto 0514 de 2026.", "https://jurinfo.jep.gov.co/Normograma/compilacion/docs/decreto_0514_2026.htm", "2026"),
+    "magdalena": ("institucional", "Gobernación del Magdalena. (s. f.). Información sobre grupos indígenas.", "https://www.gobernaciondelmagdalena.gov.co/transparencia-resolucion-1519-de-2020/transparencia-informacion-especifica-para-grupos-de-interes/grupos-indigenas/", ""),
+    "ant": ("institucional", "Agencia Nacional de Tierras. (s. f.). Pueblo Arhuaco recibe 465 hectáreas para ampliar su territorio ancestral.", "https://www.ant.gov.co/prensa/noticias/con-el-fin-de-que-amplien-su-territorio-ancestral-pueblo-arhuaco-recibe-de-la-ant-un-total-de-465-hectareas", ""),
+    "iwgia": ("audiovisual", "IWGIA, Ore Media y Canejo Producciones. (2018). Voces de las montañas sagradas – Pueblo Arhuaco [Documental]. YouTube.", "https://www.youtube.com/watch?v=BEp8V93WlKs", "2018"),
+    "dw": ("audiovisual", "DW Español. (2019, 13 de marzo). La resiliencia del pueblo arhuaco en Colombia [Video]. YouTube.", "https://www.youtube.com/watch?v=TF6xNDoiNJM", "2019"),
+    "rosario": ("audiovisual", "Universidad del Rosario. (2023, 13 de febrero). Mamü, máxima autoridad política y espiritual de la comunidad arhuaca [Video]. YouTube.", "https://www.youtube.com/watch?v=FxUZuRzcoJU", "2023"),
+    "pnn": ("fotografica", "Parques Nacionales Naturales de Colombia. (s. f.). Parque Nacional Natural Sierra Nevada de Santa Marta.", "https://www.parquesnacionales.gov.co/nuestros-parques/pnn-sierra-nevada-de-santa-marta/", ""),
+    "eltiempo": ("fotografica", "EL TIEMPO. (2022). Mujeres indígenas: Crónicas de la Sierra Nevada.", "https://www.eltiempo.com/infografias/2022/10/mujeres_indigenas/cronicas-dev/sierra/index.html", "2022"),
+    "artesanias": ("fotografica", "Artesanías de Colombia. (s. f.). Jóvenes artesanos Arhuacos impulsan iniciativa de desarrollo artesanal. Sistema de Información para la Artesanía (SIART).", "https://artesaniasdecolombia.com.co/PortalAC/Noticia/jovenes-artesanos-arhuacos-impulsan-iniciativa-de-desarrollo-artesanal_3482", ""),
+}
+
+# Las líneas «Fuente de apoyo» del documento base, sección por sección.
+SECTION_SOURCES = {
+    2: ["mincultura", "onic", "procuraduria"],
+    3: ["procuraduria", "mincultura", "decreto", "ant"],
+    4: ["procuraduria", "icanh", "decreto"],
+    5: ["onic", "mincultura", "unad", "rosario"],
+    6: ["mincultura", "icanh", "procuraduria", "eltiempo", "artesanias"],
+    7: ["pes", "icanh", "decreto"],
+    8: ["unad", "pes"],
+    9: ["pes", "onic", "magdalena"],
+    10: ["icanh", "cnmh", "unad", "iwgia", "dw"],
+    11: ["mincultura", "cnmh", "decreto", "iwgia"],
+    12: ["pnn", "eltiempo", "artesanias", "rosario"],
+    13: list(SOURCES),  # la sección de fuentes las reúne todas
+}
 
 
 class Command(BaseCommand):
@@ -266,6 +284,7 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def handle(self, *args, **options):
+        sections: dict[int, ArchiveSection] = {}
         for data in SECTIONS:
             section, created = ArchiveSection.objects.update_or_create(
                 number=data["number"],
@@ -277,17 +296,32 @@ class Command(BaseCommand):
                     "is_published": True,
                 },
             )
+            sections[section.number] = section
             self.stdout.write(
                 f"{'+' if created else '·'} {section.number}. {section.title}"
             )
 
-        for kind, citation, url, year in SOURCES:
-            Source.objects.update_or_create(
+        sources: dict[str, Source] = {}
+        for key, (kind, citation, url, year) in SOURCES.items():
+            source, _ = Source.objects.update_or_create(
                 citation=citation,
                 defaults={"kind": kind, "url": url, "year": year},
             )
+            sources[key] = source
+
+        # Vincula cada fuente con las secciones que la citan, según las líneas
+        # «Fuente de apoyo» del documento base.
+        enlaces = 0
+        for number, keys in SECTION_SOURCES.items():
+            section = sections.get(number)
+            if section is None:
+                continue
+            section.sources.set([sources[key] for key in keys])
+            enlaces += len(keys)
+
         self.stdout.write(
             self.style.SUCCESS(
-                f"Listo: {len(SECTIONS)} secciones y {len(SOURCES)} fuentes."
+                f"Listo: {len(SECTIONS)} secciones, {len(SOURCES)} fuentes "
+                f"y {enlaces} vínculos entre ambas."
             )
         )

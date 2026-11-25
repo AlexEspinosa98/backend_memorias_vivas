@@ -30,9 +30,12 @@ class CommunityViewSet(viewsets.ModelViewSet):
     filterset_fields = ["people", "department", "municipality"]
 
     def get_queryset(self):
+        # La anotación NO puede llamarse `member_count`: `Community` ya expone
+        # una propiedad con ese nombre y Django no puede escribirla sobre la
+        # instancia (AttributeError: property has no setter).
         return (
             Community.objects.annotate(
-                member_count=Count(
+                active_members=Count(
                     "memberships",
                     filter=Q(memberships__status=Membership.Status.ACTIVE),
                     distinct=True,

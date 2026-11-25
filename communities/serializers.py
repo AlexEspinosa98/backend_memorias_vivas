@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from accounts.serializers import UserPublicSerializer
@@ -6,7 +7,7 @@ from .models import Community, Membership
 
 
 class CommunitySerializer(serializers.ModelSerializer):
-    member_count = serializers.IntegerField(read_only=True)
+    member_count = serializers.SerializerMethodField()
     my_membership = serializers.SerializerMethodField()
 
     class Meta:
@@ -29,6 +30,12 @@ class CommunitySerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = ["id", "slug", "created_at"]
+
+    @extend_schema_field(serializers.IntegerField())
+    def get_member_count(self, community):
+        """Usa la anotación del viewset si viene; si no, la propiedad del modelo."""
+        annotated = getattr(community, "active_members", None)
+        return annotated if annotated is not None else community.member_count
 
     def get_my_membership(self, community):
         user = self.context.get("request").user if self.context.get("request") else None
