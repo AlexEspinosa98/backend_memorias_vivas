@@ -89,12 +89,20 @@ WSGI_APPLICATION = "memorias_vivas.wsgi.application"
 
 # --- Base de datos -------------------------------------------------------
 # Sin DATABASE_URL se usa SQLite (desarrollo local).
-# En Vercel se define DATABASE_URL apuntando a Postgres (Neon / Vercel Postgres).
+# En Vercel se define DATABASE_URL apuntando a Neon (Postgres serverless).
+#
+# En serverless cada petición puede caer en un contenedor nuevo, así que no
+# tiene sentido mantener conexiones abiertas: se usa la cadena *con pooler*
+# de Neon (el host lleva `-pooler`) y `conn_max_age=0`, que deja el manejo de
+# conexiones al pooler. Fuera de serverless conviene reutilizarlas.
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+SERVERLESS = env_bool("VERCEL", False) or bool(os.getenv("VERCEL_ENV"))
 if DATABASE_URL:
     DATABASES = {
         "default": dj_database_url.parse(
-            DATABASE_URL, conn_max_age=600, ssl_require=True
+            DATABASE_URL,
+            conn_max_age=0 if SERVERLESS else 600,
+            ssl_require=True,
         )
     }
 else:
