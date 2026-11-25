@@ -36,6 +36,16 @@ class Community(models.Model):
     is_open_to_requests = models.BooleanField(
         "acepta solicitudes de ingreso", default=True
     )
+    ai_settings = models.JSONField(
+        "funciones de IA activadas", default=dict, blank=True,
+        help_text=(
+            "Cada comunidad decide qué funciones de inteligencia artificial "
+            "corren sobre sus contenidos. Vacío significa ninguna. "
+            'Ejemplo: {"revisor_cuidado": true, "revisor_cuidado_externo": false}. '
+            "El sufijo `_externo` autoriza, además, enviar el texto a un "
+            "proveedor fuera del servidor."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

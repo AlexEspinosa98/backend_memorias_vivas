@@ -74,6 +74,35 @@ autorización (`stories/tests.py`).
 | `communities` | Comunidades, vínculos (`Membership`) con rol y estado, solicitudes de ingreso y su decisión. |
 | `stories` | El muro: historias, materiales, autorizaciones, permisos nominales, reacciones, comentarios, visitas, promociones y reportes. |
 | `catalog` | Las 13 secciones del archivo, sus figuras y las fuentes del documento base. |
+| `ai` | Capa de inteligencia artificial: las cinco reglas, el revisor de cuidado cultural, las sugerencias pendientes y la auditoría. |
+
+## La capa de IA
+
+`ai/guards.py` tiene las cinco reglas en un solo lugar, y ningún módulo de
+`ai/` consulta `Story.objects` directamente:
+
+1. Solo contenido autorizado (`authorized_stories`).
+2. El alcance del consentimiento manda (`indexable_stories`).
+3. Lo sensible no sale (mismo filtro que excluye del mapa).
+4. Nada se publica solo: toda salida entra por `record()` como
+   `AiSuggestion` pendiente, nunca sobre `Story`.
+5. Cada comunidad activa lo que quiere, en `Community.ai_settings`; vacío
+   significa ninguna función.
+
+La única función implementada es el **revisor de cuidado cultural**: corre al
+enviar una historia a revisión y deja una nota para la autoridad. No bloquea
+nada.
+
+**Funciona sin ningún modelo ni clave.** El proveedor `reglas` busca los
+términos que la comunidad mantiene en el admin (*Términos de cuidado
+cultural*), y esa lista no se expone por la API: es sensible en sí misma.
+
+Un proveedor externo (Gemini) puede dar una segunda mirada, y está apagado por
+defecto. Para encenderlo hacen falta tres cosas a la vez: `GEMINI_API_KEY`,
+`GEMINI_MODEL` (sin valor por defecto a propósito — cópielo de Google AI
+Studio) y que la comunidad lo autorice con `revisor_cuidado_externo` en su
+`ai_settings`. Aun así, el contenido sensible y el de acceso restringido nunca
+salen del servidor: `guards.may_process(..., external=True)` lo impide.
 
 ## Endpoints principales
 

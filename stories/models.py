@@ -97,6 +97,20 @@ class StoryQuerySet(models.QuerySet):
         )
         return qs.filter(allowed).distinct()
 
+    def viewable_or_editable_by(self, user):
+        """
+        Lo que puede ver en el muro, más lo que puede administrar.
+
+        El muro usa `visible_for`, que solo muestra lo publicado; pero una
+        autoridad necesita abrir el detalle de una historia que todavía está
+        en revisión, y la autoría el de su propio borrador.
+        """
+        if not user or not user.is_authenticated:
+            return self.visible_for(user)
+        visibles = self.visible_for(user).values("pk")
+        editables = self.editable_by(user).values("pk")
+        return self.filter(Q(pk__in=visibles) | Q(pk__in=editables)).distinct()
+
     def editable_by(self, user):
         """Historias que la persona puede modificar (propias o de su comunidad si es autoridad)."""
         if not user or not user.is_authenticated:

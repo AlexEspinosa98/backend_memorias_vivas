@@ -187,6 +187,7 @@ class StoryDetailSerializer(StoryListSerializer):
     visit = VisitSerializer(read_only=True)
     promotion = PromotionSerializer(read_only=True)
     consents = serializers.SerializerMethodField()
+    care_review = serializers.SerializerMethodField()
 
     class Meta(StoryListSerializer.Meta):
         fields = StoryListSerializer.Meta.fields + [
@@ -195,10 +196,42 @@ class StoryDetailSerializer(StoryListSerializer):
             "visit",
             "promotion",
             "consents",
+            "care_review",
             "review_note",
             "updated_at",
         ]
         read_only_fields = fields
+
+    @extend_schema_field(OpenApiTypes.OBJECT)
+    def get_care_review(self, story):
+        """
+        La nota del revisor de cuidado cultural.
+
+        Solo la ven quienes deciden la publicación: la autoridad de la
+        comunidad y la administración. No es para el público ni para la
+        autoría, porque señala justo lo que no debería salir.
+        """
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        if not user or not user.is_authenticated:
+            return None
+        if not (
+            user.is_staff_role
+            or story.community_id in user.authority_community_ids()
+        ):
+            return None
+
+        from ai.review import ultima_revision
+
+        revision = ultima_revision(story)
+        if revision is None:
+            return None
+        return {
+            "resumen": revision.payload.get("resumen", ""),
+            "hallazgos": revision.findings,
+            "proveedor": revision.provider,
+            "fecha": revision.created_at,
+        }
 
     def get_consents(self, story):
         """El detalle de la autorización solo lo ven autoría, autoridades y moderación."""

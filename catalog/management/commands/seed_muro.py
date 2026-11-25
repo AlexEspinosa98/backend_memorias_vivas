@@ -188,6 +188,7 @@ class Command(BaseCommand):
         stories = self._seed_stories()
         self._seed_media(stories)
         self._seed_interactions(stories)
+        self._seed_ia(stories)
 
         publicadas = Story.objects.filter(status=StoryStatus.PUBLISHED).count()
         abiertas = Story.objects.filter(
@@ -583,6 +584,28 @@ class Command(BaseCommand):
         )
         hechas.append(story)
 
+        # --- 11. En revisión, con algo que el revisor debe señalar -----------
+        story, _ = self._crear(
+            autor="persona1",
+            comunidad="Nabusímake",
+            titulo="Lo que vimos en la subida de marzo",
+            kind=StoryKind.MEMORIA,
+            summary="Borrador de prueba para ver el revisor de cuidado cultural.",
+            body=(
+                "Subimos temprano. El mamo nos explicó por qué se hace el "
+                "pagamento antes de entrar, y nos pidió no tomar fotografías "
+                "cerca del sitio sagrado.\n\n"
+                "Este texto existe para mostrar cómo el revisor marca un "
+                "borrador: menciona una práctica ceremonial, un lugar que puede "
+                "ser sagrado y palabras atribuidas a una persona. Ninguna "
+                "autoridad lo ha autorizado, y por eso no se puede publicar."
+            ),
+            visibility=Visibility.COMMUNITY,
+            status=StoryStatus.IN_REVIEW,
+            place_name="Nabusímake",
+        )
+        hechas.append(story)
+
         for story in hechas:
             self.stdout.write(
                 f"  · {story.get_status_display():<26} {story.get_visibility_display():<36} {story.title[:44]}"
@@ -590,6 +613,49 @@ class Command(BaseCommand):
         return hechas
 
     # ------------------------------------------------------------------
+    def _seed_ia(self, stories):
+        """
+        Activa el revisor de cuidado cultural y le da términos con que trabajar.
+
+        Los términos son palabras de uso público que el propio documento base
+        emplea (pagamento, sitio sagrado, Línea Negra). No se incluye aquí
+        ningún nombre de lugar real: la lista verdadera la arma cada comunidad
+        desde el admin, y no se publica.
+        """
+        from ai.models import CareTerm
+        from ai.review import FEATURE, revisar
+
+        for community in self.communities.values():
+            community.ai_settings = {FEATURE: True}
+            community.save(update_fields=["ai_settings"])
+
+        terminos = [
+            ("pagamento", CareTerm.Kind.PRACTICE,
+             "Práctica ceremonial: verifique con la autoridad antes de publicar."),
+            ("sitio sagrado", CareTerm.Kind.PLACE,
+             "No se divulga la ubicación ni el significado de los sitios sagrados."),
+            ("Línea Negra", CareTerm.Kind.PLACE,
+             "Sistema de espacios sagrados reconocido por el Decreto 0514 de 2026."),
+            ("ofrenda", CareTerm.Kind.PRACTICE, ""),
+            ("ceremonia", CareTerm.Kind.PRACTICE, ""),
+            ("mamo", CareTerm.Kind.PERSON,
+             "Si se le atribuyen palabras, debe constar su autorización."),
+        ]
+        for term, kind, note in terminos:
+            CareTerm.objects.update_or_create(
+                term=term, community=None,
+                defaults={"kind": kind, "note": note, "is_active": True},
+            )
+
+        revisadas = 0
+        for story in stories:
+            if story.status == StoryStatus.IN_REVIEW and revisar(story) is not None:
+                revisadas += 1
+        self.stdout.write(
+            f"  · IA activada en {len(self.communities)} comunidades, "
+            f"{len(terminos)} términos, {revisadas} historia(s) revisada(s)"
+        )
+
     def _seed_media(self, stories):
         puestas = 0
         for story in stories:

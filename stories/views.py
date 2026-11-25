@@ -71,6 +71,7 @@ class StoryViewSet(viewsets.ModelViewSet):
         "autorizaciones",
         "accesos",
         "materiales",
+        "revision_ia",
     }
 
     def get_queryset(self):
@@ -82,6 +83,10 @@ class StoryViewSet(viewsets.ModelViewSet):
         )
         if self.action in self.EDIT_ACTIONS:
             return base.editable_by(self.request.user)
+        if self.action == "retrieve":
+            # El detalle también abre lo que la persona administra: su propio
+            # borrador, o una historia de su comunidad que está en revisión.
+            return base.viewable_or_editable_by(self.request.user)
         if self.action == "mias":
             return base.filter(author=self.request.user)
         if self.action == "por_revisar":
@@ -142,6 +147,14 @@ class StoryViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("Solo la autoría puede enviar a revisión.")
         story.status = StoryStatus.IN_REVIEW
         story.save(update_fields=["status", "updated_at"])
+
+        # Deja una nota de cuidado cultural para quien va a revisar. No
+        # bloquea: si la comunidad no activó la función, o el revisor falla,
+        # el envío a revisión sigue su curso igual.
+        from ai.review import revisar
+
+        revisar(story, user=request.user)
+
         return Response(StoryDetailSerializer(story, context=self.get_serializer_context()).data)
 
     @action(
@@ -273,6 +286,36 @@ class StoryViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         serializer.save(story=story)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(
+        detail=True,
+        methods=["get"],
+        url_path="revision-ia",
+        permission_classes=[permissions.IsAuthenticated, CanModerateStory],
+    )
+    def revision_ia(self, request, pk=None):
+        """La nota del revisor de cuidado cultural, para quien decide publicar."""
+        from ai.review import esta_activo, ultima_revision
+
+        story = self.get_object()
+        revision = ultima_revision(story)
+        if revision is None:
+            return Response(
+                {
+                    "activo": esta_activo(story.community),
+                    "resumen": None,
+                    "hallazgos": [],
+                }
+            )
+        return Response(
+            {
+                "activo": True,
+                "resumen": revision.payload.get("resumen", ""),
+                "hallazgos": revision.findings,
+                "proveedor": revision.provider,
+                "fecha": revision.created_at,
+            }
+        )
 
     # --- Mapa -------------------------------------------------------------
     @action(detail=False, methods=["get"], permission_classes=[permissions.AllowAny])

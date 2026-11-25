@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     "communities",
     "stories",
     "catalog",
+    "ai",
 ]
 
 MIDDLEWARE = [
