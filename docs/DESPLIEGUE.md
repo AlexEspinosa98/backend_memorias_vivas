@@ -153,6 +153,95 @@ git push                        # esto dispara el despliegue
 
 ---
 
+## Encender las funciones de IA (opcional)
+
+El revisor de cuidado cultural **funciona sin nada de esto**, con la lista de
+términos que mantiene la comunidad. Lo que sigue solo hace falta para el
+asistente de consulta y para la segunda mirada del revisor.
+
+### 1. Sacar la clave
+
+1. Entrar a <https://aistudio.google.com/apikey> con una cuenta de Google.
+2. *Create API key*, y elegir un proyecto (o dejar que cree uno).
+3. Copiar la clave. Se ve una sola vez; si se pierde, se crea otra.
+
+La clave es un secreto: no va al repositorio ni a un chat. Va en `.env`
+(ignorado por git) y en las variables de entorno de Vercel.
+
+### 2. Averiguar el nombre del modelo
+
+No lo adivine ni lo copie de un blog: los nombres cambian y uno equivocado
+falla. Pregúnteselo a su propia clave:
+
+```bash
+GEMINI_API_KEY="su-clave" python manage.py ia_estado --modelos
+```
+
+Lista los modelos que esa clave acepta y termina sugiriendo cuál usar:
+
+```
+  Para este proyecto sirve:  GEMINI_MODEL=<el que salga>
+```
+
+Un modelo «flash» alcanza de sobra y es el más barato.
+
+### 3. Probarlo en local antes de desplegar
+
+Con las dos variables en `.env`:
+
+```bash
+python manage.py ia_estado
+```
+
+```bash
+python manage.py ia_estado --probar "¿cómo se aprende a tejer una mochila?"
+```
+
+La primera muestra qué está configurado y qué activó cada comunidad; la
+segunda hace una consulta real y muestra la respuesta con sus fuentes.
+
+Pruebe también un tema vedado — `--probar "cómo se hace un pagamento"` — y
+verifique que responde `estado: vedada` sin llamar al modelo.
+
+### 4. Ponerlas en Vercel
+
+En el proyecto del **backend**, *Settings → Environment Variables*:
+
+| Variable | Valor |
+| --- | --- |
+| `GEMINI_API_KEY` | la clave de AI Studio |
+| `GEMINI_MODEL` | el id que sugirió `--modelos` |
+
+Redesplegar para que las tome.
+
+### 5. Activar la función en cada comunidad
+
+Nada corre hasta que la comunidad lo autorice. En el admin, *Comunidades* →
+la comunidad → campo **funciones de IA activadas**:
+
+```json
+{"revisor_cuidado": true}
+```
+
+Para que además el texto pueda salir hacia Gemini, hay que agregar el
+sufijo `_externo`, que es una decisión aparte:
+
+```json
+{"revisor_cuidado": true, "revisor_cuidado_externo": true}
+```
+
+Aun así, el contenido sensible y el de acceso restringido nunca salen del
+servidor: eso está en el código, no en la configuración.
+
+### Sobre el costo
+
+El plan gratuito de Google AI Studio alcanza para un prototipo, pero las
+cuotas cambian y conviene revisarlas en su propia consola antes de una
+demostración. Si la cuota se agota, el asistente responde que no está
+disponible y el revisor sigue funcionando con reglas: nada se rompe.
+
+---
+
 ## Lo que todavía no funciona en Vercel
 
 **Las fotografías y los audios.** `MEDIA_ROOT` escribe en disco y en Vercel el
