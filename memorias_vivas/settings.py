@@ -140,13 +140,13 @@ STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
-    # Sin manifiesto: exigiría `collectstatic`, y en Vercel el runtime de
-    # Python no corre un paso de build propio. WhiteNoise sirve los estáticos
-    # directamente desde las apps gracias a WHITENOISE_USE_FINDERS.
+    # Sin manifiesto a propósito: si `collectstatic` no llegara a correr, el
+    # almacenamiento con manifiesto tumba el admin entero con un 500. Con
+    # WHITENOISE_USE_FINDERS los estáticos se encuentran igual.
     "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
 }
-# Deja que WhiteNoise encuentre los estáticos del admin sin `collectstatic`.
-# Cuesta un poco más por petición, pero son solo el CSS y el JS del admin.
+# Vercel corre `collectstatic` solo y sirve los estáticos desde su CDN; con
+# esta opción los recoge directamente de las apps y STATIC_ROOT no es crítico.
 WHITENOISE_USE_FINDERS = True
 WHITENOISE_AUTOREFRESH = DEBUG
 

@@ -66,16 +66,29 @@ línea `DATABASE_URL` del `.env`.
 
 1. En Vercel: **Add New → Project** e importar
    `AlexEspinosa98/backend_memorias_vivas`.
-2. Framework preset: **Other**. No hay que tocar los comandos de build ni el
-   directorio de salida: el runtime de Python de Vercel detecta `api/index.py`,
-   instala `requirements.txt` por su cuenta y `vercel.json` manda todas las
-   rutas a esa función.
+2. **Framework preset: Django.** Vercel lo detecta solo por el `manage.py`,
+   lee `WSGI_APPLICATION` de `settings.py` y carga `application` desde
+   `memorias_vivas/wsgi.py`. Instala `requirements.txt` y corre
+   `collectstatic` por su cuenta.
 
-   > Si ve el error `externally-managed-environment` en el log de build, el
-   > proyecto está usando una configuración vieja con `builds` y un script
-   > `build_files.sh`. Esa forma ya no funciona: el Python de la imagen de
-   > build lo gestiona `uv` y rechaza `pip install`. La configuración actual
-   > del repositorio no usa script de build.
+   Este repositorio **no tiene `vercel.json` ni carpeta `api/`**, y así debe
+   quedarse: la detección nativa se encarga de todo. Solo haría falta un
+   `vercel.json` para ajustar la función (por ejemplo `maxDuration`), con la
+   clave `memorias_vivas/wsgi.py`.
+
+   > **Si el proyecto ya existía en Vercel con la configuración vieja**, hay
+   > que limpiarlo: en *Settings → General*, dejar el Framework Preset en
+   > `Django` y quitar cualquier Build Command, Output Directory o Install
+   > Command sobreescrito. Después, *Deployments → Redeploy* **sin** caché.
+   >
+   > Dos errores conocidos de configuraciones viejas:
+   > - `externally-managed-environment` en el build: venía de un script
+   >   `build_files.sh` con `pip install`. El Python de la imagen de build lo
+   >   gestiona `uv` y rechaza instalar encima.
+   > - **404 de Vercel en todas las rutas** (página «Not Found» sencilla, sin
+   >   traza de Django): venía de un `vercel.json` con `rewrites` hacia
+   >   `/api/index`. Si ve ese 404, revise que no queden ni `vercel.json` ni
+   >   `api/` en el repositorio.
 3. En **Environment Variables**, antes del primer despliegue:
 
 | Variable | Valor |

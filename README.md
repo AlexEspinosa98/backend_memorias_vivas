@@ -97,9 +97,10 @@ autorización (`stories/tests.py`).
 
 Paso a paso completo en [`docs/DESPLIEGUE.md`](docs/DESPLIEGUE.md).
 
-El punto de entrada es `api/index.py`: el runtime de Python de Vercel lo
-detecta, instala `requirements.txt` solo y `vercel.json` le manda todas las
-rutas. No hay script de build. En el proyecto de Vercel hay que definir:
+Vercel detecta el proyecto por el `manage.py`, lee `WSGI_APPLICATION` y carga
+`application` desde `memorias_vivas/wsgi.py`. No hay `vercel.json` ni carpeta
+`api/`, y no deben añadirse: la detección nativa instala las dependencias y
+corre `collectstatic` sola. En el proyecto de Vercel hay que definir:
 
 ```
 DJANGO_SECRET_KEY   (una clave larga y nueva)
