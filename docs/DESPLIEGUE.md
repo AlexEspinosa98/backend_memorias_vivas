@@ -180,10 +180,20 @@ GEMINI_API_KEY="su-clave" python manage.py ia_estado --modelos
 Lista los modelos que esa clave acepta y termina sugiriendo cuál usar:
 
 ```
-  Para este proyecto sirve:  GEMINI_MODEL=<el que salga>
+  Para este proyecto:  GEMINI_MODEL=<el que salga>
 ```
 
-Un modelo «flash» alcanza de sobra y es el más barato.
+A noviembre de 2026, la documentación de Google recomienda para proyectos
+nuevos **`gemini-4-hydrogen`** o **`gemini-3.5-flash-lite`**. El primero es el
+que mejor sigue instrucciones, que es justo lo que este proyecto necesita: el
+asistente tiene que negarse a responder ciertos temas y citar sus fuentes. El
+segundo es más barato, si la cuota se queda corta.
+
+Los modelos `gemini-2.5-*` están restringidos a quienes ya los usaban y no
+sirven para un proyecto nuevo.
+
+Como estos nombres cambian, el comando es la fuente de verdad: muestra lo que
+**su** clave acepta hoy.
 
 ### 3. Probarlo en local antes de desplegar
 

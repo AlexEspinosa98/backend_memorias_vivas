@@ -120,16 +120,26 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING("  Ninguno sirve para generar texto."))
             return
 
+        # Orden de preferencia para este proyecto. Google recomienda Gemini 4
+        # Hydrogen o 3.5 Flash-Lite para proyectos nuevos; los 2.5 están
+        # restringidos a quienes ya los usaban.
+        preferidos = [
+            "gemini-4-hydrogen",
+            "gemini-3.5-flash-lite",
+            "gemini-3.8-flash",
+            "gemini-3.6-flash",
+            "gemini-3.1-flash-lite",
+        ]
         sugerido = next(
-            (m for m in utiles if "flash" in m and "lite" not in m and "preview" not in m),
-            utiles[0],
+            (m for m in preferidos if m in utiles),
+            next((m for m in utiles if "preview" not in m and "tts" not in m), utiles[0]),
         )
         self.stdout.write("")
         self.stdout.write(
-            self.style.SUCCESS(f"  Para este proyecto sirve:  GEMINI_MODEL={sugerido}")
+            self.style.SUCCESS(f"  Para este proyecto:  GEMINI_MODEL={sugerido}")
         )
         self.stdout.write(
-            "  (un modelo «flash» alcanza de sobra y es el más barato de la lista)"
+            "  Si la cuota se queda corta, gemini-3.5-flash-lite es más barato."
         )
 
     # ------------------------------------------------------------------
