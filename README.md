@@ -95,8 +95,11 @@ autorización (`stories/tests.py`).
 
 ## Despliegue en Vercel
 
-`vercel.json` y `build_files.sh` ya están listos. En el proyecto de Vercel hay
-que definir:
+Paso a paso completo en [`docs/DESPLIEGUE.md`](docs/DESPLIEGUE.md).
+
+El punto de entrada es `api/index.py`: el runtime de Python de Vercel lo
+detecta, instala `requirements.txt` solo y `vercel.json` le manda todas las
+rutas. No hay script de build. En el proyecto de Vercel hay que definir:
 
 ```
 DJANGO_SECRET_KEY   (una clave larga y nueva)

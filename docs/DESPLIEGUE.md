@@ -66,8 +66,16 @@ línea `DATABASE_URL` del `.env`.
 
 1. En Vercel: **Add New → Project** e importar
    `AlexEspinosa98/backend_memorias_vivas`.
-2. Framework preset: **Other**. No hace falta tocar los comandos de build:
-   `vercel.json` y `build_files.sh` ya están en el repositorio.
+2. Framework preset: **Other**. No hay que tocar los comandos de build ni el
+   directorio de salida: el runtime de Python de Vercel detecta `api/index.py`,
+   instala `requirements.txt` por su cuenta y `vercel.json` manda todas las
+   rutas a esa función.
+
+   > Si ve el error `externally-managed-environment` en el log de build, el
+   > proyecto está usando una configuración vieja con `builds` y un script
+   > `build_files.sh`. Esa forma ya no funciona: el Python de la imagen de
+   > build lo gestiona `uv` y rechaza `pip install`. La configuración actual
+   > del repositorio no usa script de build.
 3. En **Environment Variables**, antes del primer despliegue:
 
 | Variable | Valor |

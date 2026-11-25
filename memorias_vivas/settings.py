@@ -7,9 +7,11 @@ El acceso a los contenidos lo decide la comunidad: ver `stories.models.Visibilit
 from datetime import timedelta
 from pathlib import Path
 
+import os
+import sys
+
 import dj_database_url
 from dotenv import load_dotenv
-import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
@@ -97,6 +99,13 @@ WSGI_APPLICATION = "memorias_vivas.wsgi.application"
 # conexiones al pooler. Fuera de serverless conviene reutilizarlas.
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 SERVERLESS = env_bool("VERCEL", False) or bool(os.getenv("VERCEL_ENV"))
+
+# Las pruebas nunca tocan la base real: con DATABASE_URL apuntando a Neon,
+# `manage.py test` crearía y borraría una base en el servidor de producción.
+RUNNING_TESTS = "test" in sys.argv
+if RUNNING_TESTS:
+    DATABASE_URL = ""
+
 if DATABASE_URL:
     DATABASES = {
         "default": dj_database_url.parse(
@@ -131,15 +140,15 @@ STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
-    "staticfiles": {
-        # El manifiesto exige `collectstatic`; en desarrollo no hace falta.
-        "BACKEND": (
-            "django.contrib.staticfiles.storage.StaticFilesStorage"
-            if DEBUG
-            else "whitenoise.storage.CompressedManifestStaticFilesStorage"
-        )
-    },
+    # Sin manifiesto: exigiría `collectstatic`, y en Vercel el runtime de
+    # Python no corre un paso de build propio. WhiteNoise sirve los estáticos
+    # directamente desde las apps gracias a WHITENOISE_USE_FINDERS.
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
 }
+# Deja que WhiteNoise encuentre los estáticos del admin sin `collectstatic`.
+# Cuesta un poco más por petición, pero son solo el CSS y el JS del admin.
+WHITENOISE_USE_FINDERS = True
+WHITENOISE_AUTOREFRESH = DEBUG
 
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
@@ -189,3 +198,10 @@ if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+    SECURE_SSL_REDIRECT = True
+    # Un año. Vercel ya sirve todo por HTTPS; esto evita el primer salto en claro.
+    SECURE_HSTS_SECONDS = 31_536_000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = "DENY"

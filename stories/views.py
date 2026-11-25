@@ -342,7 +342,10 @@ class ReactionViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return Reaction.objects.filter(user=self.request.user).select_related("story")
+        user = self.request.user
+        if not user.is_authenticated:
+            return Reaction.objects.none()
+        return Reaction.objects.filter(user=user).select_related("story")
 
 
 class ReportViewSet(viewsets.ModelViewSet):
@@ -353,6 +356,8 @@ class ReportViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         qs = Report.objects.select_related("story", "comment")
+        if not user.is_authenticated:
+            return qs.none()
         if user.is_staff_role:
             return qs
         community_ids = user.authority_community_ids()
@@ -382,6 +387,8 @@ class ConsentViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         user = self.request.user
         qs = Consent.objects.select_related("story", "community")
+        if not user.is_authenticated:
+            return qs.none()
         if user.is_staff_role:
             return qs
         return qs.filter(
@@ -394,6 +401,7 @@ class AccessGrantViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return StoryAccessGrant.objects.filter(user=self.request.user).select_related(
-            "story"
-        )
+        user = self.request.user
+        if not user.is_authenticated:
+            return StoryAccessGrant.objects.none()
+        return StoryAccessGrant.objects.filter(user=user).select_related("story")

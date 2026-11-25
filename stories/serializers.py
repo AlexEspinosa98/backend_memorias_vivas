@@ -1,4 +1,5 @@
 from django.core.exceptions import ValidationError as DjangoValidationError
+from drf_spectacular.utils import OpenApiTypes, extend_schema_field
 from rest_framework import serializers
 
 from accounts.serializers import UserPublicSerializer
@@ -154,9 +155,11 @@ class StoryListSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
+    @extend_schema_field(OpenApiTypes.OBJECT)
     def get_location(self, story):
         return story.public_location
 
+    @extend_schema_field(OpenApiTypes.URI)
     def get_cover(self, story):
         item = next(
             (m for m in story.media.all() if m.kind == MediaItem.Kind.IMAGE), None
@@ -169,6 +172,7 @@ class StoryListSerializer(serializers.ModelSerializer):
             return request.build_absolute_uri(url) if request else url
         return item.external_url or None
 
+    @extend_schema_field(OpenApiTypes.STR)
     def get_my_reaction(self, story):
         request = self.context.get("request")
         user = getattr(request, "user", None)
