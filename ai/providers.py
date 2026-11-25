@@ -89,6 +89,67 @@ def gemini_disponible() -> tuple[bool, str]:
     return True, ""
 
 
+def _llamar_gemini(
+    instrucciones: str, mensaje: str, *, json_mode: bool, timeout: int
+) -> dict | None:
+    """Una llamada al modelo. Devuelve el JSON crudo, o None si algo falló."""
+    ok, motivo = gemini_disponible()
+    if not ok:
+        logger.info("Gemini no configurado: %s", motivo)
+        return None
+
+    config: dict = {"temperature": 0}
+    if json_mode:
+        config["responseMimeType"] = "application/json"
+
+    cuerpo = json.dumps(
+        {
+            "systemInstruction": {"parts": [{"text": instrucciones}]},
+            "contents": [{"role": "user", "parts": [{"text": mensaje}]}],
+            "generationConfig": config,
+        }
+    ).encode("utf-8")
+
+    peticion = urllib.request.Request(
+        GEMINI_ENDPOINT.format(model=os.environ["GEMINI_MODEL"].strip()),
+        data=cuerpo,
+        headers={
+            "Content-Type": "application/json",
+            "x-goog-api-key": os.environ["GEMINI_API_KEY"].strip(),
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(peticion, timeout=timeout) as respuesta:
+            return json.loads(respuesta.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        logger.warning("Gemini respondió %s: %s", exc.code, exc.reason)
+    except Exception as exc:  # red caída, timeout, JSON inválido
+        logger.warning("Gemini no respondió: %s", exc)
+    return None
+
+
+def _texto_de(datos: dict) -> str:
+    try:
+        return datos["candidates"][0]["content"]["parts"][0]["text"]
+    except (KeyError, IndexError, TypeError):
+        logger.warning("Respuesta de Gemini con forma inesperada")
+        return ""
+
+
+def preguntar_a_gemini(instrucciones: str, mensaje: str, *, timeout: int = 30) -> str:
+    """
+    Una respuesta en texto para el asistente de consulta.
+
+    Devuelve cadena vacía si el proveedor no está configurado o falla: el
+    asistente responde entonces que no puede, en lugar de inventar.
+    """
+    datos = _llamar_gemini(
+        instrucciones, mensaje, json_mode=False, timeout=timeout
+    )
+    return _texto_de(datos).strip() if datos else ""
+
+
 def analizar_con_gemini(texto: str, *, timeout: int = 20) -> list[dict]:
     """
     Proveedor `gemini`: segunda mirada con un modelo de lenguaje.
@@ -97,48 +158,13 @@ def analizar_con_gemini(texto: str, *, timeout: int = 20) -> list[dict]:
     lanza: el revisor debe seguir funcionando con reglas aunque el proveedor
     externo esté caído, mal configurado o sin cuota.
     """
-    ok, motivo = gemini_disponible()
-    if not ok:
-        logger.info("Gemini no configurado: %s", motivo)
+    datos = _llamar_gemini(INSTRUCCIONES, texto, json_mode=True, timeout=timeout)
+    if datos is None:
         return []
-
-    model = os.environ["GEMINI_MODEL"].strip()
-    cuerpo = json.dumps(
-        {
-            "systemInstruction": {"parts": [{"text": INSTRUCCIONES}]},
-            "contents": [{"role": "user", "parts": [{"text": texto}]}],
-            "generationConfig": {
-                "temperature": 0,
-                "responseMimeType": "application/json",
-            },
-        }
-    ).encode("utf-8")
-
-    peticion = urllib.request.Request(
-        GEMINI_ENDPOINT.format(model=model),
-        data=cuerpo,
-        headers={
-            "Content-Type": "application/json",
-            "x-goog-api-key": os.environ["GEMINI_API_KEY"].strip(),
-        },
-        method="POST",
-    )
-
     try:
-        with urllib.request.urlopen(peticion, timeout=timeout) as respuesta:
-            datos = json.loads(respuesta.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        logger.warning("Gemini respondió %s: %s", exc.code, exc.reason)
-        return []
-    except Exception as exc:  # red caída, timeout, JSON inválido
-        logger.warning("Gemini no respondió: %s", exc)
-        return []
-
-    try:
-        texto_respuesta = datos["candidates"][0]["content"]["parts"][0]["text"]
-        hallazgos = json.loads(texto_respuesta).get("hallazgos", [])
-    except (KeyError, IndexError, ValueError, TypeError) as exc:
-        logger.warning("Respuesta de Gemini con forma inesperada: %s", exc)
+        hallazgos = json.loads(_texto_de(datos)).get("hallazgos", [])
+    except (ValueError, AttributeError) as exc:
+        logger.warning("Gemini no devolvió el JSON esperado: %s", exc)
         return []
 
     limpios = []

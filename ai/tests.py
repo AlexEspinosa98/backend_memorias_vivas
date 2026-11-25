@@ -6,6 +6,7 @@ contenido puede leer un modelo, qué nunca sale del servidor, y que nada de lo
 que produzca se publique solo.
 """
 from datetime import date
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -19,7 +20,9 @@ from ai.guards import (
     may_process,
     visible_index_for,
 )
-from ai.models import AiAuditLog, AiSuggestion, CareTerm
+from ai.assistant import construir_contexto, tema_vedado
+from catalog.models import ArchiveSection
+from ai.models import AiAuditLog, AiSuggestion, AssistantQuery, CareTerm
 from ai.providers import buscar_terminos
 from ai.review import FEATURE, revisar, ultima_revision
 from communities.models import Community, Membership
@@ -223,6 +226,136 @@ class ReviewTests(TestCase, Fixture):
         revisar(s)
         s.refresh_from_db()
         self.assertEqual((s.body, s.status, s.review_note), antes)
+
+
+class AssistantTests(APITestCase, Fixture):
+    """
+    El asistente responde solo con el archivo, y hay temas que no toca.
+
+    Ninguna prueba llama al modelo: lo que se verifica es lo que pasa ANTES y
+    DESPUÉS de esa llamada, que es donde están las reglas.
+    """
+
+    def setUp(self):
+        self.build()
+        self.url = reverse("asistente")
+        # Una sección publicada: sin fuentes el asistente responde «no está»
+        # antes de llegar al modelo, y no se probaría nada de lo que sigue.
+        ArchiveSection.objects.create(
+            number=6, title="Cultura y tradiciones",
+            lead="Vestimenta, tejidos y mochilas.",
+            body="La mochila es uno de los elementos más reconocidos.",
+        )
+
+    # --- temas vedados ---------------------------------------------------
+    def test_pagamento_no_se_responde(self):
+        response = self.client.post(
+            self.url, {"pregunta": "¿Cómo se hace un pagamento?"}, format="json"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["estado"], "vedada")
+        self.assertIn("autoridades de la comunidad", response.data["respuesta"])
+
+    def test_sitios_sagrados_no_se_responden(self):
+        for pregunta in [
+            "dónde quedan los sitios sagrados",
+            "qué es la Línea Negra",
+            "explícame la Ley de Origen",
+        ]:
+            with self.subTest(pregunta=pregunta):
+                response = self.client.post(
+                    self.url, {"pregunta": pregunta}, format="json"
+                )
+                self.assertEqual(response.data["estado"], "vedada")
+
+    def test_el_veto_ignora_tildes_y_mayusculas(self):
+        response = self.client.post(
+            self.url, {"pregunta": "QUE ES LA LINEA NEGRA"}, format="json"
+        )
+        self.assertEqual(response.data["estado"], "vedada")
+
+    def test_los_terminos_de_la_comunidad_tambien_vetan(self):
+        CareTerm.objects.create(
+            term="ezwama", kind=CareTerm.Kind.KNOWLEDGE, community=self.com
+        )
+        self.assertEqual(tema_vedado("qué es un ezwama"), "ezwama")
+
+    def test_un_tema_vedado_no_llega_al_modelo(self):
+        """Se rechaza antes de construir contexto: el tema no sale del servidor."""
+        with patch("ai.assistant.preguntar_a_gemini") as modelo:
+            self.client.post(self.url, {"pregunta": "un pagamento"}, format="json")
+        modelo.assert_not_called()
+
+    def test_queda_registrado_qué_se_rechazó(self):
+        self.client.post(self.url, {"pregunta": "un pagamento"}, format="json")
+        consulta = AssistantQuery.objects.get()
+        self.assertEqual(consulta.status, AssistantQuery.Status.REFUSED)
+        self.assertEqual(consulta.blocked_by, "pagamento")
+
+    # --- sin proveedor configurado ---------------------------------------
+    def test_sin_clave_lo_dice_en_vez_de_inventar(self):
+        response = self.client.post(
+            self.url, {"pregunta": "¿Cómo se teje una mochila?"}, format="json"
+        )
+        self.assertEqual(response.data["estado"], "no_disponible")
+        self.assertEqual(response.data["fuentes"], [])
+
+    # --- el contexto respeta los permisos --------------------------------
+    def test_el_contexto_solo_trae_lo_que_la_persona_ve(self):
+        s = self.story("Relato de la comunidad", body="Sobre el tejido")
+        add_consent(s)
+        s.publish(by=self.autoridad)
+
+        titulos_miembro = {f["titulo"] for f in construir_contexto(self.autor)}
+        self.assertIn("Relato de la comunidad", titulos_miembro)
+
+        titulos_anonimo = {f["titulo"] for f in construir_contexto(None)}
+        self.assertNotIn("Relato de la comunidad", titulos_anonimo)
+
+    def test_lo_sensible_nunca_entra_al_contexto(self):
+        s = self.story(
+            "Reservada", is_sensitive=True, visibility=Visibility.RESTRICTED,
+            body="No debe salir",
+        )
+        add_consent(s, scope=Consent.Scope.RESEARCH)
+        s.publish(by=self.autoridad)
+        titulos = {f["titulo"] for f in construir_contexto(self.autoridad)}
+        self.assertNotIn("Reservada", titulos)
+
+    # --- la respuesta ------------------------------------------------------
+    @patch("ai.assistant.gemini_disponible", return_value=(True, ""))
+    @patch("ai.assistant.preguntar_a_gemini", return_value="NO_ESTA")
+    def test_si_no_esta_en_el_archivo_lo_dice(self, _modelo, _disp):
+        response = self.client.post(
+            self.url, {"pregunta": "¿Cuántos habitantes hay?"}, format="json"
+        )
+        self.assertEqual(response.data["estado"], "sin_datos")
+        self.assertIn("No encontré eso en el archivo", response.data["respuesta"])
+
+    @patch("ai.assistant.gemini_disponible", return_value=(True, ""))
+    @patch(
+        "ai.assistant.preguntar_a_gemini",
+        return_value="El tejido se aprende en casa [1]. Las mayores corrigen [1].",
+    )
+    def test_devuelve_solo_las_fuentes_citadas(self, _modelo, _disp):
+        response = self.client.post(
+            self.url, {"pregunta": "¿Cómo se aprende a tejer?"}, format="json"
+        )
+        self.assertEqual(response.data["estado"], "respondida")
+        self.assertEqual(len(response.data["fuentes"]), 1)
+        self.assertEqual(response.data["fuentes"][0]["numero"], 1)
+
+    @patch("ai.assistant.gemini_disponible", return_value=(True, ""))
+    @patch("ai.assistant.preguntar_a_gemini", return_value="Una respuesta [2].")
+    def test_toda_consulta_queda_en_auditoria(self, _modelo, _disp):
+        self.client.post(self.url, {"pregunta": "algo del archivo"}, format="json")
+        consulta = AssistantQuery.objects.get()
+        self.assertEqual(consulta.status, AssistantQuery.Status.ANSWERED)
+        self.assertEqual(consulta.provider, "gemini")
+
+    def test_pregunta_vacia_se_rechaza(self):
+        response = self.client.post(self.url, {"pregunta": "  "}, format="json")
+        self.assertEqual(response.status_code, 400)
 
 
 class ReviewApiTests(APITestCase, Fixture):

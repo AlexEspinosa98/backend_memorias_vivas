@@ -109,6 +109,42 @@ class AiSuggestion(models.Model):
         return self.payload.get("hallazgos", [])
 
 
+class AssistantQuery(models.Model):
+    """
+    Cada consulta al asistente, con lo que respondió.
+
+    Queda registrada para que la comunidad pueda auditar qué está diciendo el
+    sistema en su nombre, y para ver qué le preguntan al archivo.
+    """
+
+    class Status(models.TextChoices):
+        ANSWERED = "respondida", "Respondida"
+        REFUSED = "vedada", "Tema que no se responde"
+        NO_DATA = "sin_datos", "No está en el archivo"
+
+    question = models.TextField("pregunta")
+    answer = models.TextField("respuesta", blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices)
+    blocked_by = models.CharField(
+        "término que la bloqueó", max_length=120, blank=True
+    )
+    sources = models.JSONField("fuentes citadas", default=list, blank=True)
+    provider = models.CharField(max_length=40, default="reglas")
+    asked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="assistant_queries",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "consulta al asistente"
+        verbose_name_plural = "consultas al asistente"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.question[:60]} ({self.get_status_display()})"
+
+
 class AiAuditLog(models.Model):
     """Registro de cada vez que la IA toca un contenido."""
 

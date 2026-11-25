@@ -1,6 +1,30 @@
 from django.contrib import admin
 
-from .models import AiAuditLog, AiSuggestion, CareTerm
+from .models import AiAuditLog, AiSuggestion, AssistantQuery, CareTerm
+
+
+@admin.register(AssistantQuery)
+class AssistantQueryAdmin(admin.ModelAdmin):
+    """Lo que la gente le pregunta al archivo, y qué respondió el sistema."""
+
+    list_display = ("created_at", "status", "short_question", "blocked_by", "asked_by")
+    list_filter = ("status", "provider")
+    search_fields = ("question", "answer")
+    raw_id_fields = ("asked_by",)
+    readonly_fields = (
+        "question", "answer", "status", "blocked_by", "sources", "provider",
+        "asked_by", "created_at",
+    )
+
+    @admin.display(description="pregunta")
+    def short_question(self, obj):
+        return obj.question[:80]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(CareTerm)
